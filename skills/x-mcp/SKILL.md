@@ -4,7 +4,13 @@ description: Use and configure Kan's public read-only X/Twitter MCP server at ht
 version: 0.1.0
 author: Kan Ninomiya / kandotrun
 license: MIT
-tags: [mcp, x, twitter, fxtwitter, social-media, search]
+tags:
+  - mcp
+  - x
+  - twitter
+  - fxtwitter
+  - social-media
+  - search
 ---
 
 # x-mcp Skill
