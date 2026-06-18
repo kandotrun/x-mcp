@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Read-only MCP server for twitter.2-38.com FxTwitter API proxy",
+  "description": "Read-only MCP server for public X/Twitter search and retrieval via twitter.2-38.com",
   "scripts": {
     "types:worker": "wrangler types worker-configuration.d.ts --config wrangler.example.jsonc",
     "check": "npm run types:worker && tsc --noEmit",

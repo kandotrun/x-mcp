@@ -144,7 +144,7 @@ async function parseUpstreamBody(response: Response): Promise<unknown> {
   }
 }
 
-async function callFxTwitter(
+async function callUpstream(
   env: Env,
   pathname: string,
   params = new URLSearchParams()
@@ -164,7 +164,7 @@ async function callFxTwitter(
   const body = await parseUpstreamBody(response);
 
   if (!response.ok) {
-    throw new UpstreamError(`FxTwitter upstream returned ${response.status}`, {
+    throw new UpstreamError(`Upstream returned ${response.status}`, {
       status: response.status,
       url: url.toString(),
       body
@@ -229,11 +229,11 @@ function createServer(env: Env): McpServer {
   server.registerTool(
     'search_posts',
     {
-      title: 'Search X posts via FxTwitter',
+      title: 'Search X posts',
       description: 'Calls https://twitter.2-38.com/api/fx/2/search. Example: q="from:jack", feed="latest", count=10.',
       annotations: readOnlyAnnotations,
       inputSchema: {
-        q: z.string().min(1).max(500).describe('FxTwitter/X search query, e.g. from:jack, #hashtag, or keywords'),
+        q: z.string().min(1).max(500).describe('X/Twitter search query, e.g. from:jack, #hashtag, or keywords'),
         feed: z.enum(['latest', 'top']).default('latest').describe('Search feed type'),
         count: z.number().int().min(1).max(MAX_COUNT).default(10).describe('Number of posts to request'),
         cursor: z.string().max(500).optional().describe('Optional pagination cursor from a previous response')
@@ -246,7 +246,7 @@ function createServer(env: Env): McpServer {
         params.set('feed', feed);
         params.set('count', String(clampCount(count)));
         appendOptional(params, 'cursor', cursor);
-        return callFxTwitter(env, '/2/search', params);
+        return callUpstream(env, '/2/search', params);
       })
   );
 
@@ -260,7 +260,7 @@ function createServer(env: Env): McpServer {
         id: z.string().regex(/^[0-9]{1,30}$/).describe('Numeric X/Twitter status id')
       }
     },
-    async ({ id }) => runTool(async () => callFxTwitter(env, `/2/status/${cleanStatusId(id)}`))
+    async ({ id }) => runTool(async () => callUpstream(env, `/2/status/${cleanStatusId(id)}`))
   );
 
   server.registerTool(
@@ -273,7 +273,7 @@ function createServer(env: Env): McpServer {
         handle: z.string().min(1).max(30).describe('X/Twitter handle, with or without @')
       }
     },
-    async ({ handle }) => runTool(async () => callFxTwitter(env, `/2/profile/${cleanHandle(handle)}`))
+    async ({ handle }) => runTool(async () => callUpstream(env, `/2/profile/${cleanHandle(handle)}`))
   );
 
   server.registerTool(
@@ -293,7 +293,7 @@ function createServer(env: Env): McpServer {
         const params = new URLSearchParams();
         params.set('count', String(clampCount(count)));
         appendOptional(params, 'cursor', cursor);
-        return callFxTwitter(env, `/2/profile/${cleanHandle(handle)}/statuses`, params);
+        return callUpstream(env, `/2/profile/${cleanHandle(handle)}/statuses`, params);
       })
   );
 
@@ -314,7 +314,7 @@ function createServer(env: Env): McpServer {
         const params = new URLSearchParams();
         params.set('count', String(clampCount(count)));
         appendOptional(params, 'cursor', cursor);
-        return callFxTwitter(env, `/2/profile/${cleanHandle(handle)}/media`, params);
+        return callUpstream(env, `/2/profile/${cleanHandle(handle)}/media`, params);
       })
   );
 
@@ -332,7 +332,7 @@ function createServer(env: Env): McpServer {
       runTool(async () => {
         const params = new URLSearchParams();
         params.set('count', String(clampCount(count)));
-        return callFxTwitter(env, '/2/trends', params);
+        return callUpstream(env, '/2/trends', params);
       })
   );
 
@@ -352,7 +352,7 @@ function createServer(env: Env): McpServer {
         const params = new URLSearchParams();
         params.set('q', q);
         params.set('count', String(clampCount(count)));
-        return callFxTwitter(env, '/2/typeahead', params);
+        return callUpstream(env, '/2/typeahead', params);
       })
   );
 
@@ -364,7 +364,7 @@ function createServer(env: Env): McpServer {
       annotations: readOnlyAnnotations,
       inputSchema: {}
     },
-    async () => runTool(async () => callFxTwitter(env, '/2/openapi.json'))
+    async () => runTool(async () => callUpstream(env, '/2/openapi.json'))
   );
 
   return server;
@@ -385,7 +385,7 @@ function wellKnown(request: Request): Response {
   const origin = new URL(request.url).origin;
   return jsonResponse({
     name: 'x-mcp',
-    description: 'Read-only MCP server for twitter.2-38.com FxTwitter API proxy.',
+    description: 'Read-only MCP server for public X/Twitter search and retrieval via twitter.2-38.com.',
     transport: 'streamable-http',
     endpoint: `${origin}/mcp`,
     mcpServers: {

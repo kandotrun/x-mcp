@@ -1,6 +1,6 @@
 # x-mcp
 
-Read-only MCP server for Kan's `twitter.2-38.com` FxTwitter API proxy. Implemented as a TypeScript + Hono Cloudflare Worker.
+Read-only MCP server for public X/Twitter search and retrieval via `twitter.2-38.com`. Implemented as a TypeScript + Hono Cloudflare Worker.
 
 日本語版は下にあります: [日本語](#日本語)
 
@@ -148,13 +148,13 @@ npm run deploy
 - Public, unauthenticated, read-only MCP endpoint.
 - Do not include secrets, private data, or access tokens in search queries.
 - Not for posting, liking, reposting, following, DMs, notifications, private accounts, or authenticated timelines.
-- Upstream availability/rate limits/response shape depend on the underlying FxTwitter service.
+- Upstream availability, rate limits, and response shape depend on `twitter.2-38.com`.
 
 ---
 
 # 日本語
 
-Kan の `twitter.2-38.com` FxTwitter API proxy を read-only で呼ぶ MCP server です。実装は TypeScript + Hono の Cloudflare Worker です。
+`twitter.2-38.com` 経由で公開X/Twitter情報を read-only で検索・取得する MCP server です。実装は TypeScript + Hono の Cloudflare Worker です。
 
 ## 公開MCP endpoint
 
@@ -302,4 +302,4 @@ npm run deploy
 - 公開・認証なし・read-only のMCP endpointです。
 - search query に secret / private data / access token を入れないでください。
 - 投稿、いいね、RT、フォロー、DM、通知、private account、認証timelineには使えません。
-- upstreamの可用性、rate limit、response shapeはFxTwitter側に依存します。
+- upstreamの可用性、rate limit、response shapeは `twitter.2-38.com` 側に依存します。

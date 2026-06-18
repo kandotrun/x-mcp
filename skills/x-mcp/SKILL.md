@@ -1,6 +1,6 @@
 ---
 name: x-mcp
-description: Use and configure Kan's public read-only X/Twitter MCP server at https://x.mcp.2-38.com/mcp, backed by twitter.2-38.com FxTwitter API proxy. Load when an agent needs to search public X posts, inspect profiles, fetch post details, media timelines, trends, or typeahead suggestions through MCP.
+description: Use and configure Kan's public read-only X/Twitter MCP server at https://x.mcp.2-38.com/mcp, backed by twitter.2-38.com. Load when an agent needs to search public X posts, inspect profiles, fetch post details, media timelines, trends, or typeahead suggestions through MCP.
 version: 0.1.0
 author: Kan Ninomiya / kandotrun
 license: MIT
@@ -8,7 +8,6 @@ tags:
   - mcp
   - x
   - twitter
-  - fxtwitter
   - social-media
   - search
 ---
@@ -26,7 +25,7 @@ Use this skill when you need an AI agent to configure or use Kan's public X/Twit
 
 ## What this MCP is for
 
-Use `x-mcp` for public, read-only X/Twitter lookups through Kan's `twitter.2-38.com` FxTwitter proxy:
+Use `x-mcp` for public, read-only X/Twitter lookups through `twitter.2-38.com`:
 
 - search public posts with X search syntax, e.g. `from:jack`, `#AI`, keywords
 - fetch a single post by numeric status ID
@@ -175,7 +174,7 @@ Use for account/query suggestions.
 
 ### `get_openapi`
 
-Use when you need to inspect the upstream FxTwitter API schema.
+Use when you need to inspect the upstream API schema.
 
 ## Verification checklist
 
@@ -220,7 +219,7 @@ Common `data` fields depend on the upstream endpoint. Search/profile timeline en
 
 - This is a public no-auth endpoint. Do not put private queries, secrets, or access tokens into search strings.
 - The MCP is read-only, but it queries the public internet through `twitter.2-38.com`, so treat results as current external data and cite timestamps/URLs when reporting.
-- Upstream availability, rate limits, and response shape are controlled by the underlying FxTwitter service and may change.
+- Upstream availability, rate limits, and response shape are controlled by `twitter.2-38.com` and may change.
 - Prefer small `count` values first, then paginate with `cursor` if needed.
 - For user-facing summaries, include direct X URLs from returned posts/profiles when available.
 
