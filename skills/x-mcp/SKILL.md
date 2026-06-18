@@ -38,6 +38,10 @@ Use `x-mcp` for public, read-only X/Twitter lookups through Kan's `twitter.2-38.
 
 Do **not** use this MCP for posting, liking, retweeting, following, DMs, notifications, private accounts, or authenticated timeline access. It only wraps public read-only endpoints.
 
+## Kan preference
+
+For Kan's normal public X/Twitter search and retrieval requests, prefer this MCP over built-in `x_search` or the `xurl` CLI. Reserve `xurl` for explicit authenticated or write-capable X API operations that this read-only MCP cannot perform.
+
 ## Install / configure the MCP
 
 ### Hermes Agent

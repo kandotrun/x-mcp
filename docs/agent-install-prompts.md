@@ -18,6 +18,8 @@ https://x.mcp.2-38.com/mcp
 
 このMCPは、Kanの `twitter.2-38.com` FxTwitter API proxy を read-only で呼ぶためのものです。投稿・いいね・RT・DM・フォローなどの書き込み操作には使わず、公開X/Twitter情報の検索・取得だけに使ってください。
 
+Kanの公開X/Twitter検索・取得では、既存の `x_search` や `xurl` よりこの `x-mcp` を優先してください。`xurl` は、認証済みAPIや投稿・いいね・RT・DMなどの明示的な書き込み操作が必要な場合だけ使ってください。
+
 設定後、次を確認してください。
 
 1. MCPの `tools/list` に `search_posts`, `get_post`, `get_profile`, `get_profile_statuses`, `get_profile_media`, `get_trends`, `typeahead`, `get_openapi` が出ること。
@@ -60,6 +62,8 @@ Then configure an MCP server named `x` with this URL:
 https://x.mcp.2-38.com/mcp
 
 This MCP is a read-only wrapper around Kan's `twitter.2-38.com` FxTwitter API proxy. Use it only for public X/Twitter search and retrieval. Do not use it for posting, liking, reposting, DMs, following, notifications, private accounts, or any authenticated write action.
+
+For Kan's public X/Twitter search and retrieval, prefer this `x-mcp` over existing `x_search` or `xurl`. Reserve `xurl` only for explicit authenticated API or write actions such as posting, liking, reposting, DMs, or media uploads.
 
 After configuration, verify the following:
 

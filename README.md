@@ -51,7 +51,7 @@ https://x.mcp.2-38.com/mcp
 
 Verify tools/list includes search_posts and call search_posts with
 { "q": "from:jack", "feed": "latest", "count": 2 }.
-Use this only for public read-only X/Twitter search and retrieval through twitter.2-38.com.
+Use this instead of x_search/xurl for public read-only X/Twitter search and retrieval through twitter.2-38.com.
 ```
 
 ## MCP configuration
@@ -203,7 +203,7 @@ https://x.mcp.2-38.com/mcp
 
 `tools/list` に `search_posts` が出ることを確認し、
 `search_posts` を { "q": "from:jack", "feed": "latest", "count": 2 } で試してください。
-このMCPは twitter.2-38.com 経由の公開X/Twitter情報取得専用で、read-only用途だけに使ってください。
+このMCPは twitter.2-38.com 経由の公開X/Twitter情報取得専用です。公開read-only用途では x_search/xurl ではなくこのMCPを使ってください。
 ```
 
 ## MCP設定
