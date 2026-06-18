@@ -1,6 +1,6 @@
 # AGENTS.md
 
-This repo contains `x-mcp`, a public read-only Streamable HTTP MCP server for Kan's `twitter.2-38.com` FxTwitter API proxy.
+This repo contains `x-mcp`, a public read-only Streamable HTTP MCP server for Kan's `twitter.2-38.com` FxTwitter API proxy. The implementation is a TypeScript + Hono Cloudflare Worker.
 
 ## Operating rules
 

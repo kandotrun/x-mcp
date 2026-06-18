@@ -5,15 +5,19 @@
   "type": "module",
   "description": "Read-only MCP server for twitter.2-38.com FxTwitter API proxy",
   "scripts": {
-    "check": "node --check src/worker.js",
+    "types:worker": "wrangler types worker-configuration.d.ts --config wrangler.example.jsonc",
+    "check": "npm run types:worker && tsc --noEmit",
     "deploy:dry": "wrangler deploy --dry-run --config wrangler.jsonc",
     "deploy": "wrangler deploy --keep-vars --config wrangler.jsonc"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",
+    "hono": "^4.12.26",
     "zod": "^4.2.1"
   },
   "devDependencies": {
+    "@types/node": "^25.9.3",
+    "typescript": "^6.0.3",
     "wrangler": "^4.101.0"
   }
 }

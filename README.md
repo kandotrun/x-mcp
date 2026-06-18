@@ -1,6 +1,6 @@
 # x-mcp
 
-Read-only MCP server for Kan's `twitter.2-38.com` FxTwitter API proxy.
+Read-only MCP server for Kan's `twitter.2-38.com` FxTwitter API proxy. Implemented as a TypeScript + Hono Cloudflare Worker.
 
 日本語版は下にあります: [日本語](#日本語)
 
@@ -125,6 +125,8 @@ npm run check
 npx wrangler dev --config wrangler.jsonc
 ```
 
+`npm run check` regenerates local Worker runtime types from `wrangler.example.jsonc` and runs TypeScript type checking.
+
 MCP endpoint locally:
 
 ```text
@@ -152,7 +154,7 @@ npm run deploy
 
 # 日本語
 
-Kan の `twitter.2-38.com` FxTwitter API proxy を read-only で呼ぶ MCP server です。
+Kan の `twitter.2-38.com` FxTwitter API proxy を read-only で呼ぶ MCP server です。実装は TypeScript + Hono の Cloudflare Worker です。
 
 ## 公開MCP endpoint
 
@@ -276,6 +278,8 @@ cp wrangler.example.jsonc wrangler.jsonc
 npm run check
 npx wrangler dev --config wrangler.jsonc
 ```
+
+`npm run check` は `wrangler.example.jsonc` からローカルのWorker runtime型を再生成し、TypeScriptの型チェックを実行します。
 
 ローカルMCP endpoint:
 

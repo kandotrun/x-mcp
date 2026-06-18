@@ -1,10 +1,23 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js';
+import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import { Hono } from 'hono';
 import * as z from 'zod/v4';
 
 const DEFAULT_UPSTREAM_BASE_URL = 'https://twitter.2-38.com/api/fx';
-const DEFAULT_TIMEOUT_MS = 12000;
+const DEFAULT_TIMEOUT_MS = 12_000;
 const MAX_COUNT = 100;
+
+const TOOL_NAMES = [
+  'search_posts',
+  'get_post',
+  'get_profile',
+  'get_profile_statuses',
+  'get_profile_media',
+  'get_trends',
+  'typeahead',
+  'get_openapi'
+] as const;
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -12,40 +25,78 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'Content-Type, Accept, mcp-session-id, Last-Event-ID, mcp-protocol-version',
   'Access-Control-Expose-Headers': 'mcp-session-id, mcp-protocol-version',
   'Access-Control-Max-Age': '86400'
-};
+} satisfies Record<string, string>;
 
 const jsonHeaders = {
   'Content-Type': 'application/json; charset=utf-8',
   'Cache-Control': 'no-store',
   ...corsHeaders
+} satisfies Record<string, string>;
+
+type HonoBindings = {
+  Bindings: Env;
 };
 
-function jsonResponse(payload, status = 200, extraHeaders = {}) {
+type UpstreamResult = {
+  upstreamUrl: string;
+  status: number;
+  data: unknown;
+};
+
+type UpstreamErrorDetails = {
+  status: number;
+  url: string;
+  body: unknown;
+};
+
+class UpstreamError extends Error {
+  readonly upstream: UpstreamErrorDetails;
+
+  constructor(message: string, upstream: UpstreamErrorDetails) {
+    super(message);
+    this.name = 'UpstreamError';
+    this.upstream = upstream;
+  }
+}
+
+function jsonResponse(payload: unknown, status = 200, extraHeaders: HeadersInit = {}): Response {
   return new Response(JSON.stringify(payload, null, 2), {
     status,
-    headers: { ...jsonHeaders, ...extraHeaders }
+    headers: { ...jsonHeaders, ...Object.fromEntries(new Headers(extraHeaders)) }
   });
 }
 
-function textResponse(text, status = 200, extraHeaders = {}) {
+function textResponse(text: string, status = 200, extraHeaders: HeadersInit = {}): Response {
   return new Response(text, {
     status,
     headers: {
       'Content-Type': 'text/plain; charset=utf-8',
       'Cache-Control': 'no-store',
       ...corsHeaders,
-      ...extraHeaders
+      ...Object.fromEntries(new Headers(extraHeaders))
     }
   });
 }
 
-function clampCount(count, fallback = 10) {
+function withCors(response: Response): Response {
+  const headers = new Headers(response.headers);
+  for (const [key, value] of Object.entries(corsHeaders)) {
+    headers.set(key, value);
+  }
+  return new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers
+  });
+}
+
+function clampCount(count: number | undefined | null, fallback = 10): number {
   if (count === undefined || count === null) return fallback;
   if (!Number.isFinite(count)) return fallback;
   return Math.max(1, Math.min(MAX_COUNT, Math.trunc(count)));
 }
 
-function cleanHandle(handle) {
+function cleanHandle(handle: unknown): string {
   const value = String(handle ?? '').trim().replace(/^@/, '');
   if (!/^[A-Za-z0-9_]{1,30}$/.test(value)) {
     throw new Error('handle must be a valid X/Twitter handle without spaces');
@@ -53,7 +104,7 @@ function cleanHandle(handle) {
   return value;
 }
 
-function cleanStatusId(id) {
+function cleanStatusId(id: unknown): string {
   const value = String(id ?? '').trim();
   if (!/^[0-9]{1,30}$/.test(value)) {
     throw new Error('id must be a numeric X/Twitter status id');
@@ -61,47 +112,63 @@ function cleanStatusId(id) {
   return value;
 }
 
-function appendOptional(params, key, value) {
+function appendOptional(params: URLSearchParams, key: string, value: string | undefined | null): void {
   if (value === undefined || value === null || value === '') return;
-  params.set(key, String(value));
+  params.set(key, value);
 }
 
-function upstreamBaseUrl(env) {
-  return (env?.UPSTREAM_BASE_URL || DEFAULT_UPSTREAM_BASE_URL).replace(/\/+$/, '');
+function upstreamBaseUrl(env: Env): string {
+  return (env.UPSTREAM_BASE_URL || DEFAULT_UPSTREAM_BASE_URL).replace(/\/+$/, '');
 }
 
-async function fetchWithTimeout(url, init = {}) {
+async function fetchWithTimeout(url: URL, init: RequestInit = {}): Promise<Response> {
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort('timeout'), DEFAULT_TIMEOUT_MS);
+  const timer = setTimeout(() => controller.abort(), DEFAULT_TIMEOUT_MS);
   try {
-    return await fetch(url, { ...init, signal: controller.signal });
+    return await fetch(url.toString(), { ...init, signal: controller.signal });
   } finally {
     clearTimeout(timer);
   }
 }
 
-async function callFxTwitter(env, pathname, params = new URLSearchParams()) {
+async function parseUpstreamBody(response: Response): Promise<unknown> {
+  const contentType = response.headers.get('Content-Type') || '';
+  if (!contentType.includes('application/json')) {
+    return response.text();
+  }
+
+  try {
+    return await response.json();
+  } catch {
+    return { raw: await response.text() };
+  }
+}
+
+async function callFxTwitter(
+  env: Env,
+  pathname: string,
+  params = new URLSearchParams()
+): Promise<UpstreamResult> {
   const url = new URL(`${upstreamBaseUrl(env)}${pathname}`);
   url.search = params.toString();
 
   const response = await fetchWithTimeout(url, {
     method: 'GET',
     headers: {
-      'Accept': 'application/json',
+      Accept: 'application/json',
       'User-Agent': 'x-mcp/0.1 (+https://x.mcp.2-38.com)'
     },
     cf: { cacheTtl: 0 }
   });
 
-  const contentType = response.headers.get('Content-Type') || '';
-  const body = contentType.includes('application/json')
-    ? await response.json().catch(async () => ({ raw: await response.text() }))
-    : await response.text();
+  const body = await parseUpstreamBody(response);
 
   if (!response.ok) {
-    const error = new Error(`FxTwitter upstream returned ${response.status}`);
-    error.upstream = { status: response.status, url: url.toString(), body };
-    throw error;
+    throw new UpstreamError(`FxTwitter upstream returned ${response.status}`, {
+      status: response.status,
+      url: url.toString(),
+      body
+    });
   }
 
   return {
@@ -111,7 +178,7 @@ async function callFxTwitter(env, pathname, params = new URLSearchParams()) {
   };
 }
 
-function toolJson(result) {
+function toolJson(result: unknown): CallToolResult {
   return {
     content: [
       {
@@ -122,18 +189,20 @@ function toolJson(result) {
   };
 }
 
-function toolError(error) {
-  const payload = {
+function toolError(error: unknown): CallToolResult {
+  const payload: Record<string, unknown> = {
     error: error instanceof Error ? error.message : String(error)
   };
-  if (error?.upstream) payload.upstream = error.upstream;
+  if (error instanceof UpstreamError) {
+    payload.upstream = error.upstream;
+  }
   return {
     isError: true,
     content: [{ type: 'text', text: JSON.stringify(payload, null, 2) }]
   };
 }
 
-async function runTool(fn) {
+async function runTool(fn: () => Promise<unknown>): Promise<CallToolResult> {
   try {
     return toolJson(await fn());
   } catch (error) {
@@ -141,11 +210,12 @@ async function runTool(fn) {
   }
 }
 
-function createServer(env) {
+function createServer(env: Env): McpServer {
   const server = new McpServer(
     { name: 'x-mcp', version: '0.1.0' },
     {
-      instructions: 'Read-only MCP server for twitter.2-38.com. Tools call https://twitter.2-38.com/api/fx/2/... and return upstream JSON.'
+      instructions:
+        'Read-only MCP server for twitter.2-38.com. Tools call https://twitter.2-38.com/api/fx/2/... and return upstream JSON.'
     }
   );
 
@@ -154,7 +224,7 @@ function createServer(env) {
     destructiveHint: false,
     idempotentHint: true,
     openWorldHint: true
-  };
+  } as const;
 
   server.registerTool(
     'search_posts',
@@ -169,14 +239,15 @@ function createServer(env) {
         cursor: z.string().max(500).optional().describe('Optional pagination cursor from a previous response')
       }
     },
-    async ({ q, feed = 'latest', count = 10, cursor }) => runTool(async () => {
-      const params = new URLSearchParams();
-      params.set('q', q);
-      params.set('feed', feed);
-      params.set('count', String(clampCount(count)));
-      appendOptional(params, 'cursor', cursor);
-      return callFxTwitter(env, '/2/search', params);
-    })
+    async ({ q, feed = 'latest', count = 10, cursor }) =>
+      runTool(async () => {
+        const params = new URLSearchParams();
+        params.set('q', q);
+        params.set('feed', feed);
+        params.set('count', String(clampCount(count)));
+        appendOptional(params, 'cursor', cursor);
+        return callFxTwitter(env, '/2/search', params);
+      })
   );
 
   server.registerTool(
@@ -217,12 +288,13 @@ function createServer(env) {
         cursor: z.string().max(500).optional().describe('Optional pagination cursor from a previous response')
       }
     },
-    async ({ handle, count = 10, cursor }) => runTool(async () => {
-      const params = new URLSearchParams();
-      params.set('count', String(clampCount(count)));
-      appendOptional(params, 'cursor', cursor);
-      return callFxTwitter(env, `/2/profile/${cleanHandle(handle)}/statuses`, params);
-    })
+    async ({ handle, count = 10, cursor }) =>
+      runTool(async () => {
+        const params = new URLSearchParams();
+        params.set('count', String(clampCount(count)));
+        appendOptional(params, 'cursor', cursor);
+        return callFxTwitter(env, `/2/profile/${cleanHandle(handle)}/statuses`, params);
+      })
   );
 
   server.registerTool(
@@ -237,12 +309,13 @@ function createServer(env) {
         cursor: z.string().max(500).optional().describe('Optional pagination cursor from a previous response')
       }
     },
-    async ({ handle, count = 10, cursor }) => runTool(async () => {
-      const params = new URLSearchParams();
-      params.set('count', String(clampCount(count)));
-      appendOptional(params, 'cursor', cursor);
-      return callFxTwitter(env, `/2/profile/${cleanHandle(handle)}/media`, params);
-    })
+    async ({ handle, count = 10, cursor }) =>
+      runTool(async () => {
+        const params = new URLSearchParams();
+        params.set('count', String(clampCount(count)));
+        appendOptional(params, 'cursor', cursor);
+        return callFxTwitter(env, `/2/profile/${cleanHandle(handle)}/media`, params);
+      })
   );
 
   server.registerTool(
@@ -255,11 +328,12 @@ function createServer(env) {
         count: z.number().int().min(1).max(MAX_COUNT).default(10).describe('Number of trends to request')
       }
     },
-    async ({ count = 10 }) => runTool(async () => {
-      const params = new URLSearchParams();
-      params.set('count', String(clampCount(count)));
-      return callFxTwitter(env, '/2/trends', params);
-    })
+    async ({ count = 10 }) =>
+      runTool(async () => {
+        const params = new URLSearchParams();
+        params.set('count', String(clampCount(count)));
+        return callFxTwitter(env, '/2/trends', params);
+      })
   );
 
   server.registerTool(
@@ -273,12 +347,13 @@ function createServer(env) {
         count: z.number().int().min(1).max(MAX_COUNT).default(10).describe('Number of suggestions to request')
       }
     },
-    async ({ q, count = 10 }) => runTool(async () => {
-      const params = new URLSearchParams();
-      params.set('q', q);
-      params.set('count', String(clampCount(count)));
-      return callFxTwitter(env, '/2/typeahead', params);
-    })
+    async ({ q, count = 10 }) =>
+      runTool(async () => {
+        const params = new URLSearchParams();
+        params.set('q', q);
+        params.set('count', String(clampCount(count)));
+        return callFxTwitter(env, '/2/typeahead', params);
+      })
   );
 
   server.registerTool(
@@ -295,7 +370,7 @@ function createServer(env) {
   return server;
 }
 
-async function handleMcp(request, env) {
+async function handleMcp(request: Request, env: Env): Promise<Response> {
   const transport = new WebStandardStreamableHTTPServerTransport({
     sessionIdGenerator: undefined,
     enableJsonResponse: true
@@ -303,16 +378,10 @@ async function handleMcp(request, env) {
   const server = createServer(env);
   await server.connect(transport);
   const response = await transport.handleRequest(request);
-  const headers = new Headers(response.headers);
-  for (const [key, value] of Object.entries(corsHeaders)) headers.set(key, value);
-  return new Response(response.body, {
-    status: response.status,
-    statusText: response.statusText,
-    headers
-  });
+  return withCors(response);
 }
 
-function wellKnown(request) {
+function wellKnown(request: Request): Response {
   const origin = new URL(request.url).origin;
   return jsonResponse({
     name: 'x-mcp',
@@ -322,51 +391,37 @@ function wellKnown(request) {
     mcpServers: {
       x: { url: `${origin}/mcp` }
     },
-    tools: [
-      'search_posts',
-      'get_post',
-      'get_profile',
-      'get_profile_statuses',
-      'get_profile_media',
-      'get_trends',
-      'typeahead',
-      'get_openapi'
-    ]
+    tools: TOOL_NAMES
   });
 }
 
-function landing(request) {
+function landing(request: Request): Response {
   const origin = new URL(request.url).origin;
   return textResponse(`x-mcp\n\nRead-only MCP endpoint for twitter.2-38.com.\n\nMCP endpoint:\n${origin}/mcp\n\nExample upstream wrapped by search_posts:\nhttps://twitter.2-38.com/api/fx/2/search?q=from%3Ajack&feed=latest&count=10\n\nDiscovery:\n${origin}/.well-known/mcp.json\n`);
 }
 
-export default {
-  async fetch(request, env) {
-    const url = new URL(request.url);
+const app = new Hono<HonoBindings>();
 
-    if (request.method === 'OPTIONS') {
-      return new Response(null, { status: 204, headers: corsHeaders });
-    }
+app.options('*', () => new Response(null, { status: 204, headers: corsHeaders }));
 
-    if (url.pathname === '/health') {
-      return jsonResponse({ ok: true, service: 'x-mcp', upstreamBaseUrl: upstreamBaseUrl(env) });
-    }
+app.get('/health', (c) => jsonResponse({ ok: true, service: 'x-mcp', upstreamBaseUrl: upstreamBaseUrl(c.env) }));
 
-    if (url.pathname === '/.well-known/mcp.json') {
-      return wellKnown(request);
-    }
+app.get('/.well-known/mcp.json', (c) => wellKnown(c.req.raw));
 
-    if (url.pathname === '/' || url.pathname === '/index.txt') {
-      return landing(request);
-    }
+app.get('/', (c) => landing(c.req.raw));
+app.get('/index.txt', (c) => landing(c.req.raw));
 
-    if (url.pathname === '/mcp') {
-      if (!['POST', 'GET', 'DELETE'].includes(request.method)) {
-        return jsonResponse({ jsonrpc: '2.0', error: { code: -32000, message: 'Method not allowed' }, id: null }, 405, { Allow: 'GET, POST, DELETE, OPTIONS' });
-      }
-      return handleMcp(request, env);
-    }
-
-    return jsonResponse({ error: 'not found', mcpEndpoint: `${url.origin}/mcp` }, 404);
+app.all('/mcp', async (c) => {
+  if (!['POST', 'GET', 'DELETE'].includes(c.req.method)) {
+    return jsonResponse(
+      { jsonrpc: '2.0', error: { code: -32000, message: 'Method not allowed' }, id: null },
+      405,
+      { Allow: 'GET, POST, DELETE, OPTIONS' }
+    );
   }
-};
+  return handleMcp(c.req.raw, c.env);
+});
+
+app.notFound((c) => jsonResponse({ error: 'not found', mcpEndpoint: `${new URL(c.req.url).origin}/mcp` }, 404));
+
+export default app;
