@@ -1,0 +1,19 @@
+{
+  "name": "x-mcp",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Read-only MCP server for twitter.2-38.com FxTwitter API proxy",
+  "scripts": {
+    "check": "node --check src/worker.js",
+    "deploy:dry": "wrangler deploy --dry-run --config wrangler.jsonc",
+    "deploy": "wrangler deploy --keep-vars --config wrangler.jsonc"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "zod": "^4.2.1"
+  },
+  "devDependencies": {
+    "wrangler": "^4.101.0"
+  }
+}

@@ -1,0 +1,15 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "x-mcp",
+  "main": "src/worker.js",
+  "compatibility_date": "2026-06-18",
+  "compatibility_flags": ["nodejs_compat"],
+  "account_id": "YOUR_CLOUDFLARE_ACCOUNT_ID",
+  "observability": { "enabled": true },
+  "vars": {
+    "UPSTREAM_BASE_URL": "https://twitter.2-38.com/api/fx"
+  },
+  "routes": [
+    { "pattern": "x.mcp.2-38.com", "custom_domain": true }
+  ]
+}
