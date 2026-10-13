@@ -11,7 +11,7 @@
     "deploy": "wrangler deploy --keep-vars --config wrangler.jsonc"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.29.0",
+    "@modelcontextprotocol/sdk": "^1.31.0",
     "hono": "^4.12.26",
     "zod": "^4.2.1"
   },
