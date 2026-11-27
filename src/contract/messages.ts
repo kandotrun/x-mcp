@@ -366,7 +366,6 @@ export const notes = {
     `Stopped at ${returned} ${noun} to keep this result under ${formatChars(MAX_RESULT_CHARS)} characters; pass next_cursor as cursor for the rest.`,
   noMore: (noun: string) => `No more ${noun}.`,
   noSearchResults: 'No posts matched this query.',
-  pageShifted: (plural: string) => `The upstream page changed since the previous call, so some ${plural} may repeat.`,
   detailedTooLarge: `The detailed object exceeded ${formatChars(MAX_RESULT_CHARS)} characters, so the concise form is returned.`,
   detailedItemsTooLarge: (plural: string) =>
     `${plural[0]?.toUpperCase() ?? ''}${plural.slice(1)} too large for detailed form are returned in concise form.`,

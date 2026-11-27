@@ -5,7 +5,7 @@
 import type { Config } from '../config';
 import type { PostItem, User } from '../contract/envelopes';
 import { ToolError } from '../contract/errors';
-import { CURSOR_MAX_OFFSET, ITEM_BUDGET, MAX_RESULT_CHARS, TRENDS_UPSTREAM_MAX } from '../contract/limits';
+import { CURSOR_MAX_RETURNED, ITEM_BUDGET, MAX_RESULT_CHARS, TRENDS_UPSTREAM_MAX } from '../contract/limits';
 import {
   accountProtected,
   emptyQuery,
@@ -115,10 +115,10 @@ const ENVELOPE_OVERHEAD = 600;
  * Characters left for list items once the envelope is accounted for: the longest next_cursor this call can issue
  * (continuing on the same upstream page, or moving to a new page with the longest issued bottom cursor) plus notes.
  */
-function itemBudgetFor(scope: string, state: CursorState): number {
+export function itemBudgetFor(scope: string, state: CursorState): number {
   const id = '9'.repeat(20);
-  const samePage = encodeCursor(scope, { up: state.up, off: CURSOR_MAX_OFFSET, anc: id, seam: id }).length;
-  const nextPage = encodeCursor(scope, { up: 'x'.repeat(MAX_UPSTREAM_CURSOR), off: 0, anc: id, seam: id }).length;
+  const samePage = encodeCursor(scope, { up: state.up, seam: id, returned: 'f'.repeat(8 * CURSOR_MAX_RETURNED) }).length;
+  const nextPage = encodeCursor(scope, { up: 'x'.repeat(MAX_UPSTREAM_CURSOR), seam: id, returned: '' }).length;
   return MAX_RESULT_CHARS - ENVELOPE_OVERHEAD - Math.max(samePage, nextPage);
 }
 
@@ -173,7 +173,6 @@ function listEnvelope(kind: ListKind, scope: string, count: number, result: Pagi
   const parts: string[] = [];
   if (result.truncated) parts.push(notes.budget(returned, kind.plural));
   else if (result.pageEnded) parts.push(notes.pageEnded(returned, count));
-  if (result.shifted) parts.push(notes.pageShifted(kind.plural));
   if (result.endOfList && returned === 0) parts.push(notes.noMore(kind.plural));
   if (detailedFellBack) parts.push(notes.detailedItemsTooLarge(kind.plural));
   if (parts.length > 0) envelope.note = parts.join(' ');

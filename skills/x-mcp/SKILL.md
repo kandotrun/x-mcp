@@ -134,7 +134,7 @@ Lists:
 
 - `posts` or `users`, plus `returned`, `has_more`, and `next_cursor` (present only when `has_more` is true).
 - At most `count` items per call (1-100, default 10). Fewer can come back at an upstream page boundary.
-- To continue, pass `next_cursor` back unchanged as `cursor`, with the same tool and arguments.
+- To continue, pass `next_cursor` back unchanged as `cursor`, with the same tool and arguments. A later call can include posts added at the top of the newest page since the first call; use `created_at` to order them.
 - `note` explains short or empty results, e.g. `"@quiet has no posts."`.
 
 `response_format: "detailed"` returns the full upstream objects (several times larger). Use it only when you need a field that the concise form omits.

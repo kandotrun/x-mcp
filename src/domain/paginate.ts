@@ -1,10 +1,16 @@
 /**
  * Slice upstream pages to `count` items with lossless, stateless continuation.
- * One upstream page per call, plus a single hop only when nothing on the current page is left to return.
- * An empty page is the only end-of-list signal (upstream returns a fresh bottom cursor even at the end).
+ *
+ * The cursor remembers which items of the current upstream page were already returned (fingerprints of their ids),
+ * so every call rescans that page from the top and skips exactly those. Nothing depends on positions, so deletions,
+ * insertions and duplicate entries between calls cannot make an unread item disappear. Posts added at the top of the
+ * newest page meanwhile simply show up in a later call.
+ *
+ * One upstream page per call, plus a single hop when nothing on the current page is left to return.
+ * An empty page ends the list (upstream returns a fresh bottom cursor even at the end).
  */
-import { ITEM_BUDGET } from '../contract/limits';
-import type { CursorState } from './cursor';
+import { CURSOR_MAX_RETURNED, ITEM_BUDGET } from '../contract/limits';
+import { fnv1a32, type CursorState } from './cursor';
 
 export type Page = { items: readonly unknown[]; bottom: string | null };
 
@@ -23,76 +29,61 @@ export type PaginateResult<T> = {
   next?: CursorState;
   /** The character budget, not count, ended this result. */
   truncated: boolean;
-  /** has_more is true but fewer than count items fit on this upstream page. */
+  /** has_more is true but fewer than count items were left on this upstream page. */
   pageEnded: boolean;
-  /** The anchor disappeared since the previous call, so one item may repeat. */
-  shifted: boolean;
   /** The list ended with an empty page after at least one earlier page. */
   endOfList: boolean;
   /** The very first page (no cursor) was empty. */
   firstPageEmpty: boolean;
 };
 
-const ANCHOR_RE = /^\d{1,20}$/;
+const ID_RE = /^\d{1,20}$/;
+const PRINT_LENGTH = 8;
 
-function anchorId(item: unknown): string | undefined {
+function itemId(item: unknown): string | undefined {
   if (typeof item !== 'object' || item === null) return undefined;
   const id = (item as { id?: unknown }).id;
-  return typeof id === 'string' && ANCHOR_RE.test(id) ? id : undefined;
+  return typeof id === 'string' && ID_RE.test(id) ? id : undefined;
 }
 
-/** Where to resume on a (possibly changed) page, given the previous offset and anchor id. */
-export function resumeIndex(items: readonly unknown[], off: number, anc: string | null): { start: number; shifted: boolean } {
-  const n = items.length;
-  // A fresh page reached through the bottom cursor starts at the top. paginate() treats the anchor as already seen,
-  // so a repeated anchor (a seam overlap or a duplicate entry) is skipped without skipping anything before it.
-  if (anc === null || off === 0) return { start: Math.min(off, n), shifted: false };
-  if (anchorId(items[off - 1]) === anc) return { start: off, shifted: false };
-  let best = -1;
-  for (let i = 0; i < n; i++) {
-    if (anchorId(items[i]) !== anc) continue;
-    const distance = Math.abs(i - (off - 1));
-    const bestDistance = Math.abs(best - (off - 1));
-    if (best === -1 || distance < bestDistance || (distance === bestDistance && i > best)) best = i;
-  }
-  if (best !== -1) return { start: best + 1, shifted: false };
-  // The anchor itself was most likely deleted, so the rest of the page shifted left by one.
-  return { start: Math.max(0, Math.min(off - 1, n)), shifted: true };
+/** A 32-bit fingerprint of an id, as stored in next_cursor. */
+export function fingerprint(id: string): string {
+  return fnv1a32(id);
+}
+
+function prints(value: string): Set<string> {
+  const set = new Set<string>();
+  for (let i = 0; i + PRINT_LENGTH <= value.length; i += PRINT_LENGTH) set.add(value.slice(i, i + PRINT_LENGTH));
+  return set;
 }
 
 export async function paginate<T>(options: PaginateOptions<T>): Promise<PaginateResult<T>> {
   const { count, fetchPage, project } = options;
   const budget = options.budget ?? ITEM_BUDGET;
-  let { up, off, anc, seam } = options.state;
+  let { up, seam, returned } = options.state;
   let hopped = false;
-  const base = { truncated: false, pageEnded: false, shifted: false, endOfList: false, firstPageEmpty: false };
+  const base = { truncated: false, pageEnded: false, endOfList: false, firstPageEmpty: false };
 
   for (;;) {
     const page = await fetchPage(up);
     const items = page.items;
     if (items.length === 0) {
-      const first = up === null && !hopped;
+      const first = up === null && !hopped && returned === '';
       return { ...base, items: [], hasMore: false, endOfList: !first, firstPageEmpty: first };
     }
 
-    const { start, shifted } = resumeIndex(items, off, anc);
-    const seen = new Set<string>([anc, seam].filter((id): id is string => id !== null));
-    for (const item of items.slice(0, start)) {
-      const id = anchorId(item);
-      if (id !== undefined) seen.add(id);
-    }
-
+    // Already returned from this page (by fingerprint), or the previous page's last item (a seam overlap).
+    const done = prints(returned);
+    const seen = new Set<string>(seam === null ? [] : [seam]);
     const out: T[] = [];
+    const added: string[] = [];
     let used = 2;
     let truncated = false;
-    // The in-page anchor is the last returned item: a skipped duplicate is ambiguous and must not become the anchor.
-    let lastReturned = anc;
-    // The last id seen on this page, returned or skipped, becomes the seam for the next page.
-    let lastOnPage = anc;
-    let i = start;
+    let lastOnPage = seam;
+    let i = 0;
     for (; i < items.length; i++) {
-      const id = anchorId(items[i]);
-      if (id !== undefined && seen.has(id)) {
+      const id = itemId(items[i]);
+      if (id !== undefined && (seen.has(id) || done.has(fingerprint(id)))) {
         lastOnPage = id;
         continue;
       }
@@ -107,38 +98,27 @@ export async function paginate<T>(options: PaginateOptions<T>): Promise<Paginate
       used += size;
       if (id !== undefined) {
         seen.add(id);
-        lastReturned = id;
+        added.push(fingerprint(id));
         lastOnPage = id;
       }
     }
 
     if (i < items.length) {
-      return { ...base, items: out, hasMore: true, next: { up, off: i, anc: lastReturned, seam }, truncated, shifted };
+      const next: CursorState = { up, seam, returned: (returned + added.join('')).slice(-CURSOR_MAX_RETURNED * PRINT_LENGTH) };
+      return { ...base, items: out, hasMore: true, next, truncated };
     }
     // A bottom cursor equal to the one we asked with means the upstream did not advance.
     const bottom = page.bottom && page.bottom !== up ? page.bottom : null;
     if (out.length === 0 && bottom !== null && !hopped) {
       hopped = true;
       up = bottom;
-      off = 0;
-      anc = lastOnPage;
       seam = lastOnPage;
+      returned = '';
       continue;
     }
-    if (out.length === 0 && hopped) {
-      // Two pages in a row had nothing new: treat the list as exhausted instead of looping.
-      return { ...base, items: [], hasMore: false, endOfList: true, shifted };
-    }
     if (bottom !== null) {
-      return {
-        ...base,
-        items: out,
-        hasMore: true,
-        next: { up: bottom, off: 0, anc: lastOnPage, seam: lastOnPage },
-        pageEnded: out.length < count,
-        shifted
-      };
+      return { ...base, items: out, hasMore: true, next: { up: bottom, seam: lastOnPage, returned: '' }, pageEnded: out.length < count };
     }
-    return { ...base, items: out, hasMore: false, endOfList: out.length === 0, shifted };
+    return { ...base, items: out, hasMore: false, endOfList: out.length === 0 };
   }
 }

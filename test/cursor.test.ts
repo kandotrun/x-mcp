@@ -39,54 +39,53 @@ describe('scopeKey', () => {
 
 describe('encodeCursor / decodeCursor', () => {
   it('round-trips state', () => {
-    const state = { up: 'DAAHCgABHYHlojO__-oLAAIAAAA', off: 7, anc: '2126043413984489769', seam: '2126043413984489760' };
+    const state = { up: 'DAAHCgABHYHlojO__-oLAAIAAAA', seam: '2126043413984489760', returned: '0123abcd4567ef01' };
     const cursor = encodeCursor(STATUSES, state);
 
     expect(cursor).toMatch(/^xc1\.[A-Za-z0-9_-]+\.[0-9a-f]{8}$/);
     expect(cursor.length).toBeLessThan(200);
     expect(decodeCursor(cursor, STATUSES)).toEqual(state);
-    expect(decodeCursor(encodeCursor(STATUSES, { up: null, off: 0, anc: null, seam: null }), STATUSES)).toEqual({
+    expect(decodeCursor(encodeCursor(STATUSES, { up: null, seam: null, returned: '' }), STATUSES)).toEqual({
       up: null,
-      off: 0,
-      anc: null,
-      seam: null
+      seam: null,
+      returned: ''
     });
   });
 
   it('accepts every upstream cursor it would issue, including ones with periods', () => {
     for (const up of ['next.page', 'a:b~c', 'x'.repeat(512)]) {
       expect(isUpstreamCursor(up)).toBe(true);
-      expect(decodeCursor(encodeCursor(STATUSES, { up, off: 0, anc: '20', seam: '20' }), STATUSES)).toEqual({ up, off: 0, anc: '20', seam: '20' });
+      expect(decodeCursor(encodeCursor(STATUSES, { up, seam: '20', returned: '' }), STATUSES)).toEqual({ up, seam: '20', returned: '' });
     }
     for (const up of ['', 'has space', 'x'.repeat(513), 'quote"', 'back\\slash', 'tab\t']) expect(isUpstreamCursor(up)).toBe(false);
-    expect(encodeCursor(STATUSES, { up: 'x'.repeat(512), off: 200, anc: '12345678901234567890', seam: '12345678901234567890' }).length).toBeLessThanOrEqual(1024);
+    expect(encodeCursor(STATUSES, { up: 'x'.repeat(512), seam: '12345678901234567890', returned: 'f'.repeat(1600) }).length).toBeLessThanOrEqual(8192);
   });
 
   it('passes any 0.1 cursor string (up to 500 characters) through verbatim and round-trips it', () => {
     for (const raw of ['page two', ' padded ', 'quote"and\\backslash', '日本語のカーソル', '\u0001ctrl', 'x'.repeat(500)]) {
-      expect(decodeCursor(raw, STATUSES)).toEqual({ up: raw, off: 0, anc: null, seam: null });
-      const next = encodeCursor(STATUSES, { up: raw, off: 200, anc: '12345678901234567890', seam: '12345678901234567890' });
+      expect(decodeCursor(raw, STATUSES)).toEqual({ up: raw, seam: null, returned: '' });
+      const next = encodeCursor(STATUSES, { up: raw, seam: '12345678901234567890', returned: 'f'.repeat(1600) });
       expect(next.length).toBeLessThanOrEqual(8192);
       expect(decodeCursor(next, STATUSES).up).toBe(raw);
     }
-    const worst = encodeCursor('st:' + 'a'.repeat(30), { up: '\u0001'.repeat(512), off: 200, anc: '9'.repeat(20), seam: '9'.repeat(20) });
+    const worst = encodeCursor('st:' + 'a'.repeat(30), { up: '\u0001'.repeat(512), seam: '9'.repeat(20), returned: 'f'.repeat(1600) });
     expect(worst.length).toBeLessThanOrEqual(8192);
     expect(decodeCursor(worst, 'st:' + 'a'.repeat(30)).up).toBe('\u0001'.repeat(512));
   });
 
   it('treats a missing or blank cursor as the newest page', () => {
-    expect(decodeCursor(undefined, STATUSES)).toEqual({ up: null, off: 0, anc: null, seam: null });
-    expect(decodeCursor('  ', STATUSES)).toEqual({ up: null, off: 0, anc: null, seam: null });
+    expect(decodeCursor(undefined, STATUSES)).toEqual({ up: null, seam: null, returned: '' });
+    expect(decodeCursor('  ', STATUSES)).toEqual({ up: null, seam: null, returned: '' });
   });
 
   it('accepts 0.1 raw upstream cursors without scope binding', () => {
     for (const raw of ['DAAHCgABHYHlojO__-oLAAIAAAATMjEyMzU3NTE5NTY0MjU2ODczOQgAAwAAAAIAAA', '-1|2126233000214528001', 'HBaAgIDYxvzdoTQAAA==', 'next.page']) {
-      expect(decodeCursor(raw, STATUSES)).toEqual({ up: raw, off: 0, anc: null, seam: null });
+      expect(decodeCursor(raw, STATUSES)).toEqual({ up: raw, seam: null, returned: '' });
     }
   });
 
   it('rejects changed, cut off or garbage cursors (C1)', () => {
-    const cursor = encodeCursor(STATUSES, { up: null, off: 3, anc: '20', seam: null });
+    const cursor = encodeCursor(STATUSES, { up: null, seam: null, returned: '0123abcd' });
     const changed = `${cursor.slice(0, 10)}${cursor[10] === 'A' ? 'B' : 'A'}${cursor.slice(11)}`;
     const c1 = 'invalid_cursor: cursor is not a next_cursor issued by this server, or it was changed or cut off.';
 
@@ -101,17 +100,24 @@ describe('encodeCursor / decodeCursor', () => {
       const body = `xc1.${btoa(JSON.stringify(payload)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')}`;
       return `${body}.${fnv1a32(body)}`;
     };
-    expect(codeOf(() => decodeCursor(forge(['st:nasa', null, 201, null, null]), STATUSES))).toMatch(/^invalid_cursor/);
-    expect(codeOf(() => decodeCursor(forge(['st:nasa', '', 0, null, null]), STATUSES))).toMatch(/^invalid_cursor/);
-    expect(codeOf(() => decodeCursor(forge(['st:nasa', 'x'.repeat(513), 0, null, null]), STATUSES))).toMatch(/^invalid_cursor/);
-    expect(codeOf(() => decodeCursor(forge(['st:nasa', null, 0, 'abc', null]), STATUSES))).toMatch(/^invalid_cursor/);
-    expect(codeOf(() => decodeCursor(forge(['st:nasa', null, 0, null, 'abc']), STATUSES))).toMatch(/^invalid_cursor/);
-    expect(codeOf(() => decodeCursor(forge(['st:nasa', null, 0, null]), STATUSES))).toMatch(/^invalid_cursor/);
-    expect(codeOf(() => decodeCursor(forge({ scope: 'st:nasa' }), STATUSES))).toMatch(/^invalid_cursor/);
+    expect(decodeCursor(forge(['st:nasa', null, null, '0123abcd']), STATUSES)).toEqual({ up: null, seam: null, returned: '0123abcd' });
+    for (const payload of [
+      ['st:nasa', '', null, ''],
+      ['st:nasa', 'x'.repeat(513), null, ''],
+      ['st:nasa', null, 'abc', ''],
+      ['st:nasa', null, null, 'xyz'],
+      ['st:nasa', null, null, '0123abc'],
+      ['st:nasa', null, null, '0'.repeat(8 * 201)],
+      ['st:nasa', null, null],
+      ['st:nasa', null, null, '', null],
+      { scope: 'st:nasa' }
+    ]) {
+      expect(codeOf(() => decodeCursor(forge(payload), STATUSES)), JSON.stringify(payload).slice(0, 60)).toMatch(/^invalid_cursor/);
+    }
   });
 
   it('rejects a cursor issued for another call (C2)', () => {
-    const cursor = encodeCursor('md:nasa', { up: null, off: 3, anc: '20', seam: null });
+    const cursor = encodeCursor('md:nasa', { up: null, seam: null, returned: '0123abcd' });
 
     expect(codeOf(() => decodeCursor(cursor, STATUSES))).toBe(
       'invalid_cursor: This cursor was issued for get_profile_media for @nasa, not for this call.'

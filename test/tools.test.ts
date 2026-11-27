@@ -10,7 +10,9 @@ import {
 } from '../src/contract/envelopes';
 import { MAX_RESULT_CHARS } from '../src/contract/limits';
 import { TOOL_NAMES } from '../src/contract/tools';
+import { scopeKey } from '../src/domain/cursor';
 import { stripMosaic } from '../src/domain/project';
+import { itemBudgetFor } from '../src/tools/handlers';
 import { call, connect, fakeUpstream, json, timelinePage } from './helpers';
 import articles from './fixtures/articles.json';
 import about from './fixtures/about.json';
@@ -326,10 +328,15 @@ describe('get_profile_statuses', () => {
     expect(both.data.note).toBe('Posts too large for detailed form are returned in concise form.');
 
     // The first item nearly fills the budget, so the oversized second item is projected (concise) but not returned.
+    const budget = itemBudgetFor(scopeKey({ tool: 'get_profile_statuses', handle: 'jack', includeReplies: false }), {
+      up: null,
+      seam: null,
+      returned: ''
+    });
     const deferred = timelinePage({ size: 2 });
     const first = deferred.results[0] as Record<string, unknown>;
     first.text = '';
-    first.text = 'z'.repeat(28_500 - JSON.stringify(stripMosaic(first)).length);
+    first.text = 'z'.repeat(budget - 400 - JSON.stringify(stripMosaic(first)).length);
     (deferred.results[1] as Record<string, unknown>).text = 'y'.repeat(30_000);
     const result = await call(await connect(fakeUpstream(() => json(deferred)).fetch), 'get_profile_statuses', {
       handle: 'jack',

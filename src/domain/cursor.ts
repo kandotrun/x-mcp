@@ -1,16 +1,15 @@
 /**
- * Stateless pagination cursors: "xc1." + base64url(JSON [scope, up, off, anc, seam]) + "." + fnv1a32 checksum.
+ * Stateless pagination cursors: "xc1." + base64url(JSON [scope, up, seam, returned]) + "." + fnv1a32 checksum.
  * - scope binds the cursor to the tool and its arguments
  * - up is the upstream cursor of the page being sliced (null = newest page)
- * - off is the raw index of the next unhandled entry on that page
- * - anc is the id of the last handled entry, used to resume correctly when the page shifts
- * - seam is the last id of the previous upstream page, skipped if it shows up again anywhere on this page
+ * - seam is the last id of the previous upstream page, skipped if it shows up again on this page
+ * - returned holds 8-hex-digit fingerprints of the ids already returned from this page (see paginate.ts)
  * The checksum only detects corruption (e.g. a model dropping characters); cursors are not a security boundary.
  */
 import { corruptCursor, cursorScopeMismatch, cursorVersion } from '../contract/messages';
-import { CURSOR_MAX_LEN, CURSOR_MAX_OFFSET } from '../contract/limits';
+import { CURSOR_MAX_LEN, CURSOR_MAX_RETURNED } from '../contract/limits';
 
-export type CursorState = { up: string | null; off: number; anc: string | null; seam: string | null };
+export type CursorState = { up: string | null; seam: string | null; returned: string };
 
 export type CursorScope =
   | { tool: 'get_profile_statuses'; handle: string; includeReplies: boolean }
@@ -26,9 +25,10 @@ const PREFIX = 'xc1.';
 export const MAX_UPSTREAM_CURSOR = 512;
 /** Bottom cursors the server issues: printable ASCII except quote and backslash, so their encoded size is predictable. */
 const UPSTREAM_CURSOR_RE = /^[\x21\x23-\x5B\x5D-\x7E]{1,512}$/;
-const ANCHOR_RE = /^\d{1,20}$/;
+const SEAM_RE = /^\d{1,20}$/;
+const RETURNED_RE = new RegExp(`^(?:[0-9a-f]{8}){0,${CURSOR_MAX_RETURNED}}$`);
 const MAX_SCOPE_LENGTH = 80;
-const START: CursorState = { up: null, off: 0, anc: null, seam: null };
+const START: CursorState = { up: null, seam: null, returned: '' };
 
 const HANDLE_SCOPES: Record<string, string> = {
   st: 'get_profile_statuses',
@@ -82,7 +82,7 @@ export function describeScopeKey(key: string): string {
 }
 
 export function encodeCursor(scope: string, state: CursorState): string {
-  const body = PREFIX + base64UrlEncode(JSON.stringify([scope, state.up, state.off, state.anc, state.seam]));
+  const body = PREFIX + base64UrlEncode(JSON.stringify([scope, state.up, state.seam, state.returned]));
   return `${body}.${fnv1a32(body)}`;
 }
 
@@ -104,7 +104,7 @@ export function decodeCursor(input: string | undefined, expectedScope: string): 
   }
   if (/^xc\d+\./.test(value)) throw cursorVersion();
   // An unversioned value is a 0.1 raw upstream cursor (data.cursor.bottom); 0.1 forwarded any string verbatim.
-  if (isCarriedCursor(raw)) return { up: raw, off: 0, anc: null, seam: null };
+  if (isCarriedCursor(raw)) return { up: raw, seam: null, returned: '' };
   throw corruptCursor();
 }
 
@@ -115,20 +115,17 @@ function parsePayload(payload: string): { scope: string; state: CursorState } {
   } catch {
     throw corruptCursor();
   }
-  if (!Array.isArray(parsed) || parsed.length !== 5) throw corruptCursor();
-  const [scope, up, off, anc, seam] = parsed as unknown[];
+  if (!Array.isArray(parsed) || parsed.length !== 4) throw corruptCursor();
+  const [scope, up, seam, returned] = parsed as unknown[];
   const valid =
     typeof scope === 'string' &&
     scope.length <= MAX_SCOPE_LENGTH &&
     (up === null || isCarriedCursor(up)) &&
-    typeof off === 'number' &&
-    Number.isInteger(off) &&
-    off >= 0 &&
-    off <= CURSOR_MAX_OFFSET &&
-    (anc === null || (typeof anc === 'string' && ANCHOR_RE.test(anc))) &&
-    (seam === null || (typeof seam === 'string' && ANCHOR_RE.test(seam)));
+    (seam === null || (typeof seam === 'string' && SEAM_RE.test(seam))) &&
+    typeof returned === 'string' &&
+    RETURNED_RE.test(returned);
   if (!valid) throw corruptCursor();
-  return { scope, state: { up, off, anc, seam } };
+  return { scope, state: { up, seam, returned } };
 }
 
 /** FNV-1a 32-bit hash of the UTF-16 code units, as 8 lowercase hex characters. */

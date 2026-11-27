@@ -21,7 +21,8 @@ export const MAX_UPSTREAM_REQUESTS_PER_HTTP_REQUEST = 10;
 
 /** Long enough for a next_cursor that carries a 0.1 raw cursor of any content (JSON escaping, UTF-8). */
 export const CURSOR_MAX_LEN = 8_192;
-export const CURSOR_MAX_OFFSET = 200;
+/** Fingerprints of returned items a next_cursor keeps for the current upstream page (pages hold about 20-70 items). */
+export const CURSOR_MAX_RETURNED = 200;
 
 export const TRENDS_UPSTREAM_MAX = 50;
 
