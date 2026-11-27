@@ -80,16 +80,24 @@ export const postLinkWithoutAccount = () =>
     hint: 'Call get_post with this link as id and read post.author.handle.'
   });
 
+const UNKNOWN_TOOL_RE = /^(?:MCP error -?\d+: )?Tool [\s\S]* (?:not found|disabled)$/;
+
 /** Schema validation failures and unknown tools, reported by the MCP SDK before any handler runs. */
 export const invalidArguments = (detail: string) =>
-  new ToolError({
-    code: 'invalid_argument',
-    retryable: false,
-    message: detail.replace(/^MCP error -?\d+: /, ''),
-    hint: /^(MCP error -?\d+: )?Tool \S+ (not found|disabled)/.test(detail)
-      ? 'Use one of the tool names from tools/list.'
-      : "Fix the arguments as the error describes (see the tool's inputSchema) and call again."
-  });
+  UNKNOWN_TOOL_RE.test(detail)
+    ? // A fixed message: the SDK's text repeats the caller-supplied tool name.
+      new ToolError({
+        code: 'invalid_argument',
+        retryable: false,
+        message: 'Unknown tool name.',
+        hint: 'Use one of the tool names from tools/list.'
+      })
+    : new ToolError({
+        code: 'invalid_argument',
+        retryable: false,
+        message: detail.replace(/^MCP error -?\d+: /, ''),
+        hint: "Fix the arguments as the error describes (see the tool's inputSchema) and call again."
+      });
 
 export const emptyQuery = (tool: 'search_posts' | 'typeahead') =>
   new ToolError({
@@ -362,7 +370,8 @@ export const notes = {
   detailedTooLarge: `The detailed object exceeded ${formatChars(MAX_RESULT_CHARS)} characters, so the concise form is returned.`,
   detailedItemsTooLarge: (plural: string) =>
     `${plural[0]?.toUpperCase() ?? ''}${plural.slice(1)} over ${formatChars(ITEM_BUDGET)} characters in detailed form are returned in concise form.`,
-  onlyReplies: (handle: string) => `@${handle} has no posts other than replies; pass include_replies=true to see them.`,
+  noPostsWithoutReplies: (handle: string, listed: number) =>
+    `X returned no posts without replies for @${handle}, although its profile lists ${listed} posts; try include_replies=true.`,
   noTrends: 'The upstream returned no trends right now; this is not an error in your request.',
   trendsClamped: `count was reduced to ${TRENDS_UPSTREAM_MAX}, the upstream maximum.`,
   protectedProfile:

@@ -10,6 +10,7 @@ import {
 } from '../src/contract/envelopes';
 import { MAX_RESULT_CHARS } from '../src/contract/limits';
 import { TOOL_NAMES } from '../src/contract/tools';
+import { stripMosaic } from '../src/domain/project';
 import { call, connect, fakeUpstream, json, timelinePage } from './helpers';
 import articles from './fixtures/articles.json';
 import about from './fixtures/about.json';
@@ -104,8 +105,15 @@ describe('get_post', () => {
     const outOfRange = await call(client, 'get_profile_statuses', { handle: 'jack', count: 200 });
     expect(ErrorPayloadSchema.parse(outOfRange.data).error).toContain('count must be a whole number from 1 to 100');
 
-    const unknown = await call(client, 'no_such_tool', {});
-    expect(ErrorPayloadSchema.parse(unknown.data)).toMatchObject({ code: 'invalid_argument', hint: 'Use one of the tool names from tools/list.' });
+    for (const name of ['no_such_tool', 'get post', 'Tool x not found']) {
+      const unknown = await call(client, name, {});
+      expect(ErrorPayloadSchema.parse(unknown.data)).toEqual({
+        error: 'Unknown tool name.',
+        code: 'invalid_argument',
+        retryable: false,
+        hint: 'Use one of the tool names from tools/list.'
+      });
+    }
   });
 });
 
@@ -248,7 +256,7 @@ describe('get_profile_statuses', () => {
       posts: [],
       returned: 0,
       has_more: false,
-      note: '@replier has no posts other than replies; pass include_replies=true to see them.'
+      note: 'X returned no posts without replies for @replier, although its profile lists 7 posts; try include_replies=true.'
     });
     expect(fake.urls).toHaveLength(3);
   });
@@ -287,12 +295,26 @@ describe('get_profile_statuses', () => {
   it('notes a concise fallback in detailed mode only when such an item is returned', async () => {
     const page = timelinePage({ size: 2 });
     (page.results[1] as Record<string, unknown>).text = 'y'.repeat(30_000);
-    const client = await connect(fakeUpstream(() => json(page)).fetch);
-
-    const both = await call(client, 'get_profile_statuses', { handle: 'jack', count: 2, response_format: 'detailed' });
+    const both = await call(await connect(fakeUpstream(() => json(page)).fetch), 'get_profile_statuses', {
+      handle: 'jack',
+      count: 2,
+      response_format: 'detailed'
+    });
     expect(both.data.note).toBe('Posts over 29,000 characters in detailed form are returned in concise form.');
-    const first = await call(client, 'get_profile_statuses', { handle: 'jack', count: 1, response_format: 'detailed' });
-    expect(first.data.note).toBeUndefined();
+
+    // The first item nearly fills the budget, so the oversized second item is projected (concise) but not returned.
+    const deferred = timelinePage({ size: 2 });
+    const first = deferred.results[0] as Record<string, unknown>;
+    first.text = '';
+    first.text = 'z'.repeat(28_500 - JSON.stringify(stripMosaic(first)).length);
+    (deferred.results[1] as Record<string, unknown>).text = 'y'.repeat(30_000);
+    const result = await call(await connect(fakeUpstream(() => json(deferred)).fetch), 'get_profile_statuses', {
+      handle: 'jack',
+      count: 2,
+      response_format: 'detailed'
+    });
+    expect(result.data).toMatchObject({ returned: 1, truncated: true });
+    expect(result.data.note).toBe('Stopped at 1 posts to keep this result under 30,000 characters; pass next_cursor as cursor for the rest.');
   });
 
   it('keeps detailed pages under the result budget', async () => {

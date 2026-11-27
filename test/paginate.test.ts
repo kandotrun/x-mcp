@@ -38,7 +38,7 @@ const project = (item: unknown) => ({ id: (item as Item).id, text: (item as Item
 
 async function drain(timeline: FakeTimeline, count: number, between?: (call: number) => void) {
   const seen: string[] = [];
-  let state: CursorState = { up: null, off: 0, anc: null };
+  let state: CursorState = { up: null, off: 0, anc: null, seam: null };
   const fetchesPerCall: number[] = [];
   for (let call = 0; call < 200; call++) {
     const before = timeline.fetches;
@@ -94,7 +94,7 @@ describe('paginate', () => {
 
   it('enforces count even though the upstream page is larger', async () => {
     const timeline = new FakeTimeline(30, 20);
-    const result = await paginate({ state: { up: null, off: 0, anc: null }, count: 2, fetchPage: timeline.fetchPage, project });
+    const result = await paginate({ state: { up: null, off: 0, anc: null, seam: null }, count: 2, fetchPage: timeline.fetchPage, project });
 
     expect(result.items.map((item) => item.id)).toEqual(['1030', '1029']);
     expect(result).toMatchObject({ hasMore: true, next: { up: null, off: 2, anc: '1029' }, truncated: false });
@@ -102,7 +102,7 @@ describe('paginate', () => {
 
   it('reports a short page when the upstream page ends before count', async () => {
     const timeline = new FakeTimeline(30, 20);
-    const result = await paginate({ state: { up: null, off: 0, anc: null }, count: 50, fetchPage: timeline.fetchPage, project });
+    const result = await paginate({ state: { up: null, off: 0, anc: null, seam: null }, count: 50, fetchPage: timeline.fetchPage, project });
 
     expect(result.items).toHaveLength(20);
     expect(result).toMatchObject({ hasMore: true, pageEnded: true, next: { up: 'after-1011', off: 0, anc: '1011' } });
@@ -110,7 +110,7 @@ describe('paginate', () => {
 
   it('ends on an empty page even though the upstream still returns a fresh bottom cursor', async () => {
     const timeline = new FakeTimeline(5, 5);
-    const first = await paginate({ state: { up: null, off: 0, anc: null }, count: 5, fetchPage: timeline.fetchPage, project });
+    const first = await paginate({ state: { up: null, off: 0, anc: null, seam: null }, count: 5, fetchPage: timeline.fetchPage, project });
     const second = await paginate({ state: first.next!, count: 5, fetchPage: timeline.fetchPage, project });
 
     expect(first.hasMore).toBe(true);
@@ -119,7 +119,7 @@ describe('paginate', () => {
 
   it('flags an empty first page so callers can diagnose the account', async () => {
     const timeline = new FakeTimeline(0);
-    const result = await paginate({ state: { up: null, off: 0, anc: null }, count: 5, fetchPage: timeline.fetchPage, project });
+    const result = await paginate({ state: { up: null, off: 0, anc: null, seam: null }, count: 5, fetchPage: timeline.fetchPage, project });
 
     expect(result).toMatchObject({ items: [], hasMore: false, firstPageEmpty: true });
   });
@@ -140,7 +140,7 @@ describe('paginate', () => {
     };
     const fetchPage = async (up: string | null) => pages[up ?? 'start']!;
     const seen: string[] = [];
-    let state: CursorState = { up: null, off: 0, anc: null };
+    let state: CursorState = { up: null, off: 0, anc: null, seam: null };
     for (let call = 0; call < 10; call++) {
       const result = await paginate({ state, count: 2, fetchPage, project });
       seen.push(...result.items.map((item) => item.id));
@@ -148,6 +148,24 @@ describe('paginate', () => {
       state = result.next!;
     }
     expect(seen).toEqual(['91', '89', '88', '87']);
+  });
+
+  it('remembers the previous page anchor until the next page is used up', async () => {
+    const pages: Record<string, Page> = {
+      start: { items: [{ id: '91' }, { id: '89' }], bottom: 'p2' },
+      p2: { items: [{ id: '88' }, { id: '87' }, { id: '89' }, { id: '86' }], bottom: 'p3' },
+      p3: { items: [], bottom: 'p4' }
+    };
+    const fetchPage = async (up: string | null) => pages[up ?? 'start']!;
+    const seen: string[] = [];
+    let state: CursorState = { up: null, off: 0, anc: null, seam: null };
+    for (let call = 0; call < 10; call++) {
+      const result = await paginate({ state, count: 1, fetchPage, project });
+      seen.push(...result.items.map((item) => item.id));
+      if (!result.hasMore) break;
+      state = result.next!;
+    }
+    expect(seen).toEqual(['91', '89', '88', '87', '86']);
   });
 
   it('never returns an item twice when the upstream repeats it on the same page', async () => {
@@ -172,7 +190,7 @@ describe('paginate', () => {
 
   it('falls back to the offset when the anchor post is deleted between calls', async () => {
     const timeline = new FakeTimeline(13);
-    const first = await paginate({ state: { up: null, off: 0, anc: null }, count: 2, fetchPage: timeline.fetchPage, project });
+    const first = await paginate({ state: { up: null, off: 0, anc: null, seam: null }, count: 2, fetchPage: timeline.fetchPage, project });
     timeline.items = timeline.items.filter((item) => item.id !== first.next!.anc);
 
     const second = await paginate({ state: first.next!, count: 2, fetchPage: timeline.fetchPage, project });
@@ -190,7 +208,7 @@ describe('paginate', () => {
       return { items: ids(1005, 1001), bottom: 'after-1001' };
     };
 
-    const first = await paginate({ state: { up: null, off: 0, anc: null }, count: 4, fetchPage, project });
+    const first = await paginate({ state: { up: null, off: 0, anc: null, seam: null }, count: 4, fetchPage, project });
     // The newest page shrank: 1006 is gone and the page now ends right at the anchor.
     shrunk = true;
     requested.length = 0;
@@ -198,12 +216,12 @@ describe('paginate', () => {
 
     expect(requested).toEqual([null, 'after-1007']);
     expect(second.items.map((item) => item.id)).toEqual(['1005', '1004', '1003', '1002']);
-    expect(second.next).toEqual({ up: 'after-1007', off: 4, anc: '1002' });
+    expect(second.next).toEqual({ up: 'after-1007', off: 4, anc: '1002', seam: '1007' });
   });
 
   it('ends the list instead of looping when the upstream stops advancing', async () => {
     const stuck = async (): Promise<Page> => ({ items: [{ id: '1001' }], bottom: 'same' });
-    const result = await paginate({ state: { up: 'same', off: 0, anc: '1001' }, count: 5, fetchPage: stuck, project });
+    const result = await paginate({ state: { up: 'same', off: 0, anc: '1001', seam: '1001' }, count: 5, fetchPage: stuck, project });
 
     expect(result).toMatchObject({ items: [], hasMore: false, endOfList: true });
   });
@@ -213,7 +231,7 @@ describe('paginate', () => {
     for (const item of timeline.items) item.text = 'x'.repeat(400);
     const budget = 1_000;
 
-    const first = await paginate({ state: { up: null, off: 0, anc: null }, count: 6, fetchPage: timeline.fetchPage, project, budget });
+    const first = await paginate({ state: { up: null, off: 0, anc: null, seam: null }, count: 6, fetchPage: timeline.fetchPage, project, budget });
     expect(first.truncated).toBe(true);
     expect(first.items).toHaveLength(2);
 

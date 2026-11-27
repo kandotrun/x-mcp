@@ -186,13 +186,17 @@ describe('createSession', () => {
 
   it('shares an optional upstream budget across every tool call of one HTTP request', async () => {
     const client: UpstreamClient = { get: vi.fn(async () => ok) };
-    const shared = { remaining: 4 };
+    const shared = { limit: 4, remaining: 4 };
     const first = createSession(client, { log: () => {}, shared });
     const second = createSession(client, { log: () => {}, shared });
 
     for (let i = 0; i < 3; i++) await first.fetch(routes.status('20'), {});
     await second.fetch(routes.status('20'), {});
-    await expect(second.fetch(routes.status('20'), {})).rejects.toMatchObject({ code: 'rate_limited', retryable: true });
+    await expect(second.fetch(routes.status('20'), {})).rejects.toMatchObject({
+      code: 'rate_limited',
+      retryable: true,
+      message: 'This HTTP request already made 4 upstream requests, the most one request may make.'
+    });
     expect(client.get).toHaveBeenCalledTimes(4);
   });
 });

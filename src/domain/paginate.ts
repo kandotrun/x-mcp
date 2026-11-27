@@ -63,7 +63,7 @@ export function resumeIndex(items: readonly unknown[], off: number, anc: string 
 export async function paginate<T>(options: PaginateOptions<T>): Promise<PaginateResult<T>> {
   const { count, fetchPage, project } = options;
   const budget = options.budget ?? ITEM_BUDGET;
-  let { up, off, anc } = options.state;
+  let { up, off, anc, seam } = options.state;
   let hopped = false;
   const base = { truncated: false, pageEnded: false, shifted: false, endOfList: false, firstPageEmpty: false };
 
@@ -76,7 +76,7 @@ export async function paginate<T>(options: PaginateOptions<T>): Promise<Paginate
     }
 
     const { start, shifted } = resumeIndex(items, off, anc);
-    const seen = new Set<string>(anc === null ? [] : [anc]);
+    const seen = new Set<string>([anc, seam].filter((id): id is string => id !== null));
     for (const item of items.slice(0, start)) {
       const id = anchorId(item);
       if (id !== undefined) seen.add(id);
@@ -109,7 +109,7 @@ export async function paginate<T>(options: PaginateOptions<T>): Promise<Paginate
     }
 
     if (i < items.length) {
-      return { ...base, items: out, hasMore: true, next: { up, off: i, anc: lastHandled }, truncated, shifted };
+      return { ...base, items: out, hasMore: true, next: { up, off: i, anc: lastHandled, seam }, truncated, shifted };
     }
     // A bottom cursor equal to the one we asked with means the upstream did not advance.
     const bottom = page.bottom && page.bottom !== up ? page.bottom : null;
@@ -118,6 +118,7 @@ export async function paginate<T>(options: PaginateOptions<T>): Promise<Paginate
       up = bottom;
       off = 0;
       anc = lastHandled;
+      seam = lastHandled;
       continue;
     }
     if (out.length === 0 && hopped) {
@@ -129,7 +130,7 @@ export async function paginate<T>(options: PaginateOptions<T>): Promise<Paginate
         ...base,
         items: out,
         hasMore: true,
-        next: { up: bottom, off: 0, anc: lastHandled },
+        next: { up: bottom, off: 0, anc: lastHandled, seam: lastHandled },
         pageEnded: out.length < count,
         shifted
       };

@@ -18,7 +18,7 @@ import type { Route, RouteKind } from './routes';
 export type LogLine = Record<string, unknown>;
 
 /** An upstream request budget shared by every session of one HTTP request (see MAX_UPSTREAM_REQUESTS_PER_HTTP_REQUEST). */
-export type SharedBudget = { remaining: number };
+export type SharedBudget = { readonly limit: number; remaining: number };
 
 /** Upstream bodies on these routes can echo the caller's free-text query, so they are never logged. */
 const NO_SNIPPET_ROUTES = new Set<RouteKind>(['search', 'typeahead']);
@@ -34,7 +34,6 @@ export function createSession(
   const maxRequests = options.maxRequests ?? MAX_UPSTREAM_REQUESTS_PER_CALL;
   const now = options.now ?? (() => Date.now());
   const shared = options.shared;
-  const sharedTotal = shared?.remaining ?? 0;
   let requests = 0;
 
   return {
@@ -44,8 +43,8 @@ export function createSession(
         throw internalError();
       }
       if (shared !== undefined && shared.remaining <= 0) {
-        options.log({ evt: 'upstream_request_budget', route: route.kind, budget: sharedTotal });
-        throw requestBudgetExhausted(sharedTotal);
+        options.log({ evt: 'upstream_request_budget', route: route.kind, budget: shared.limit });
+        throw requestBudgetExhausted(shared.limit);
       }
       requests++;
       if (shared !== undefined) shared.remaining--;

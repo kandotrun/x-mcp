@@ -18,7 +18,7 @@ All notable changes to this project are documented here. The format follows [Kee
 - `GET` and `DELETE` on `/mcp` return 405 (the server is stateless); request bodies are limited to 64 KiB and tool arguments to 32 elements.
 - Upstream requests time out after 10 seconds including the body, read at most 2 MiB, do not follow redirects, and are capped at 3 per tool call and 10 per HTTP request (JSON-RPC batches share the budget).
 - Protected accounts are reported as `restricted` and reposts of unknown posts as `not_found`, although the upstream answers both with HTTP 500. A profile lookup that answers "not found" is retried once, because the upstream occasionally says so for existing accounts; `not_found` is marked retryable for the same reason.
-- An account whose posts are all replies gets an empty `get_profile_statuses` result with a note suggesting `include_replies: true`, instead of an error.
+- When the default `get_profile_statuses` timeline stays empty although the profile lists posts (for example an account that only replies), the result is empty with a note suggesting `include_replies: true`, instead of an error.
 
 ### Added
 

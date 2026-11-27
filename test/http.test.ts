@@ -123,7 +123,9 @@ describe('HTTP routes', () => {
     expect(response.status).toBe(200);
     expect(fake.urls.length).toBe(10);
     const results = (await response.json()) as { result: { isError?: boolean; content: { text: string }[] } }[];
-    expect(results.filter((entry) => entry.result.isError === true)).toHaveLength(20);
+    const rejected = results.filter((entry) => entry.result.isError === true);
+    expect(rejected).toHaveLength(20);
+    for (const entry of rejected) expect(entry.result.content[0]!.text).toContain('already made 10 upstream requests');
   });
 
   it('returns a JSON 404 that points at the MCP endpoint', async () => {

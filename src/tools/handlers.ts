@@ -177,7 +177,7 @@ function diagnoseAccount(
     counter?: 'statuses' | 'media_count' | 'followers' | 'following';
     what: string;
     /** When the counter also counts items this listing excludes, an empty listing is valid and gets this note. */
-    listedButEmptyNote?: string;
+    listedButEmptyNote?: (listed: number) => string;
   }
 ): EmptyFirstPage {
   return async (retry) => {
@@ -186,7 +186,7 @@ function diagnoseAccount(
     if (listed === undefined || listed === 0) return { note: options.emptyNote };
     const retried = await retry();
     if (retried.items.length > 0 || retried.hasMore) return retried;
-    if (options.listedButEmptyNote !== undefined) return { note: options.listedButEmptyNote };
+    if (options.listedButEmptyNote !== undefined) return { note: options.listedButEmptyNote(listed) };
     throw timelineMissing(handle, options.what, listed);
   };
 }
@@ -241,7 +241,7 @@ export async function getProfileStatuses(args: ToolArgs<'get_profile_statuses'>,
       counter: 'statuses',
       what: 'posts',
       // The statuses counter includes replies, so a reply-only account has an empty default timeline.
-      ...(withReplies ? {} : { listedButEmptyNote: notes.onlyReplies(handle) })
+      ...(withReplies ? {} : { listedButEmptyNote: (listed: number) => notes.noPostsWithoutReplies(handle, listed) })
     }),
     onFirstPageServerError: checkAccountOnServerError(session, handle)
   });

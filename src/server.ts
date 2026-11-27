@@ -48,7 +48,8 @@ export function createServer(env: ConfigEnv | undefined, deps: ServerDeps = {}):
     { instructions: instructions(flags), maxToolInputElements: MAX_TOOL_INPUT_ELEMENTS }
   );
   const text = describeTools(flags);
-  const shared: SharedBudget | undefined = deps.upstreamBudget === undefined ? undefined : { remaining: deps.upstreamBudget };
+  const shared: SharedBudget | undefined =
+    deps.upstreamBudget === undefined ? undefined : { limit: deps.upstreamBudget, remaining: deps.upstreamBudget };
 
   // The SDK reports schema validation failures and unknown tools through its private createToolError(message), as
   // plain text. Route them through the same JSON error envelope as every other failure. test/tools.test.ts pins this.
