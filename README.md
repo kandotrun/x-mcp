@@ -269,7 +269,7 @@ The Worker exposes twelve read-only tools through the MCP TypeScript SDK. It cal
 - **Queries leave your client.** They are sent to this public Worker and `twitter.2-38.com`. Keep secrets, private data and access tokens out of tool arguments.
 - **Upstream-dependent data.** Availability, rate limits and response shape depend on `twitter.2-38.com`. A connected MCP server can still return upstream errors.
 - **Bounded requests.** Request bodies are limited to 64 KiB and tool arguments to 32 elements. Each tool call makes at most 3 upstream requests, each with a 10-second timeout, and one HTTP request (including a JSON-RPC batch) at most 10.
-- **Stateless pagination.** `next_cursor` remembers which posts of the current upstream page were already returned, so posts deleted or added between calls never make another post go missing, and posts added at the top of the newest page show up in a later call. A post that appears on two different upstream pages can be returned twice. A garbage 0.1-style raw cursor makes the upstream restart from the newest page.
+- **Stateless pagination.** `next_cursor` remembers which posts of the current upstream page were already returned, so posts deleted or added between calls never make another post go missing. While you are still paging through the newest upstream page, posts added at its top show up in a later call. A post that appears on two different upstream pages can be returned twice. A garbage 0.1-style raw cursor makes the upstream restart from the newest page.
 - **Client-dependent setup.** Configuration keys and skill installation differ by client. The URL and Streamable HTTP transport remain the same.
 
 ## Development

@@ -1,8 +1,8 @@
 /**
  * Slice upstream pages to `count` items with lossless, stateless continuation.
  *
- * The cursor remembers which items of the current upstream page were already returned (fingerprints of their ids),
- * so every call rescans that page from the top and skips exactly those. Nothing depends on positions, so deletions,
+ * The cursor remembers which items of the current upstream page were already returned (their exact ids, or a content
+ * key for entries without one), so every call rescans that page from the top and skips exactly those. Nothing depends on positions, so deletions,
  * insertions and duplicate entries between calls cannot make an unread item disappear. Posts added at the top of the
  * newest page meanwhile simply show up in a later call.
  *
@@ -10,6 +10,7 @@
  * An empty page ends the list (upstream returns a fresh bottom cursor even at the end).
  */
 import { CURSOR_MAX_RETURNED, ITEM_BUDGET } from '../contract/limits';
+import { pageTooLarge } from '../contract/messages';
 import { fnv1a32, type CursorState } from './cursor';
 
 export type Page = { items: readonly unknown[]; bottom: string | null };
@@ -38,7 +39,8 @@ export type PaginateResult<T> = {
 };
 
 const ID_RE = /^\d{1,20}$/;
-const PRINT_LENGTH = 8;
+/** Every key in next_cursor has this length: up to 20 decimal digits fit in 13 base-36 digits. */
+export const KEY_LENGTH = 13;
 
 function itemId(item: unknown): string | undefined {
   if (typeof item !== 'object' || item === null) return undefined;
@@ -46,14 +48,22 @@ function itemId(item: unknown): string | undefined {
   return typeof id === 'string' && ID_RE.test(id) ? id : undefined;
 }
 
-/** A 32-bit fingerprint of an id, as stored in next_cursor. */
-export function fingerprint(id: string): string {
-  return fnv1a32(id);
+/** The exact id in base 36, so distinct ids never collide. Its first digit is at most "l" (20 decimal digits). */
+export function idKey(id: string): string {
+  return BigInt(id).toString(36).padStart(KEY_LENGTH, '0');
 }
 
-function prints(value: string): Set<string> {
+/** Entries without a numeric id (for example tombstones) get a stable key from their content; "z" marks it. */
+function itemKey(item: unknown): string {
+  const id = itemId(item);
+  if (id !== undefined) return idKey(id);
+  const json = JSON.stringify(item) ?? '';
+  return `z${fnv1a32(json)}${fnv1a32(`#${json}`).slice(0, KEY_LENGTH - 9)}`;
+}
+
+function keys(value: string): Set<string> {
   const set = new Set<string>();
-  for (let i = 0; i + PRINT_LENGTH <= value.length; i += PRINT_LENGTH) set.add(value.slice(i, i + PRINT_LENGTH));
+  for (let i = 0; i + KEY_LENGTH <= value.length; i += KEY_LENGTH) set.add(value.slice(i, i + KEY_LENGTH));
   return set;
 }
 
@@ -72,9 +82,9 @@ export async function paginate<T>(options: PaginateOptions<T>): Promise<Paginate
       return { ...base, items: [], hasMore: false, endOfList: !first, firstPageEmpty: first };
     }
 
-    // Already returned from this page (by fingerprint), or the previous page's last item (a seam overlap).
-    const done = prints(returned);
-    const seen = new Set<string>(seam === null ? [] : [seam]);
+    // Skip what was already returned from this page, and the previous page's last item (a seam overlap).
+    const skip = keys(returned);
+    if (seam !== null) skip.add(idKey(seam));
     const out: T[] = [];
     const added: string[] = [];
     let used = 2;
@@ -83,8 +93,9 @@ export async function paginate<T>(options: PaginateOptions<T>): Promise<Paginate
     let i = 0;
     for (; i < items.length; i++) {
       const id = itemId(items[i]);
-      if (id !== undefined && (seen.has(id) || done.has(fingerprint(id)))) {
-        lastOnPage = id;
+      const key = itemKey(items[i]);
+      if (skip.has(key)) {
+        if (id !== undefined) lastOnPage = id;
         continue;
       }
       if (out.length === count) break;
@@ -96,16 +107,15 @@ export async function paginate<T>(options: PaginateOptions<T>): Promise<Paginate
       }
       out.push(projected);
       used += size;
-      if (id !== undefined) {
-        seen.add(id);
-        added.push(fingerprint(id));
-        lastOnPage = id;
-      }
+      skip.add(key);
+      added.push(key);
+      if (id !== undefined) lastOnPage = id;
     }
 
     if (i < items.length) {
-      const next: CursorState = { up, seam, returned: (returned + added.join('')).slice(-CURSOR_MAX_RETURNED * PRINT_LENGTH) };
-      return { ...base, items: out, hasMore: true, next, truncated };
+      const remembered = returned + added.join('');
+      if (remembered.length > CURSOR_MAX_RETURNED * KEY_LENGTH) throw pageTooLarge();
+      return { ...base, items: out, hasMore: true, next: { up, seam, returned: remembered }, truncated };
     }
     // A bottom cursor equal to the one we asked with means the upstream did not advance.
     const bottom = page.bottom && page.bottom !== up ? page.bottom : null;

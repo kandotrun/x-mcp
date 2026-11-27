@@ -3,7 +3,7 @@
  * Messages never include upstream bodies or URLs; caller input is rendered through echo().
  */
 import { ToolError } from './errors';
-import { MAX_RESULT_CHARS, TRENDS_UPSTREAM_MAX, UPSTREAM_TIMEOUT_MS } from './limits';
+import { CURSOR_MAX_RETURNED, MAX_RESULT_CHARS, TRENDS_UPSTREAM_MAX, UPSTREAM_TIMEOUT_MS } from './limits';
 import { echo } from '../domain/text';
 
 const ISSUES_URL = 'https://github.com/kandotrun/x-mcp/issues';
@@ -304,6 +304,14 @@ export const typeaheadUnavailable = (q: string) => {
   });
 };
 
+export const pageTooLarge = () =>
+  new ToolError({
+    code: 'upstream_unavailable',
+    retryable: false,
+    message: `The upstream page holds more than ${CURSOR_MAX_RETURNED} items, more than a cursor can track, so it cannot be paged further.`,
+    hint: 'Use a larger count to read more of this page in fewer calls, or omit cursor to start again from the newest items.'
+  });
+
 export const upstreamFailed = (status: number) =>
   new ToolError({
     code: 'upstream_unavailable',
@@ -367,6 +375,8 @@ export const notes = {
   noMore: (noun: string) => `No more ${noun}.`,
   noSearchResults: 'No posts matched this query.',
   detailedTooLarge: `The detailed object exceeded ${formatChars(MAX_RESULT_CHARS)} characters, so the concise form is returned.`,
+  itemsTooLarge: (plural: string) =>
+    `Some ${plural} were too large to return and are listed as {"unavailable":"too_large"}; open them with their url.`,
   detailedItemsTooLarge: (plural: string) =>
     `${plural[0]?.toUpperCase() ?? ''}${plural.slice(1)} too large for detailed form are returned in concise form.`,
   noPostsWithoutReplies: (handle: string, listed: number) =>

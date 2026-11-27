@@ -286,6 +286,14 @@ export function projectTrend(raw: unknown): Trend {
   return out;
 }
 
+/** A post whose concise form still does not fit in a result: just enough to identify and open it. */
+export function tooLargePost(raw: unknown): Unavailable {
+  const p = rec(raw);
+  const id = str(p?.id);
+  const url = str(p?.url);
+  return { ...(id === undefined ? {} : { id }), ...(url === undefined || url.length > 512 ? {} : { url }), unavailable: 'too_large' };
+}
+
 /** Detailed mode: the upstream object unchanged except that every `mosaic` key (a rendered collage) is removed. */
 export function stripMosaic(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(stripMosaic);

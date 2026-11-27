@@ -1,12 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import type { CursorState } from '../src/domain/cursor';
-import { fingerprint, paginate, type Page } from '../src/domain/paginate';
+import { ToolError } from '../src/contract/errors';
+import { idKey, paginate, type Page } from '../src/domain/paginate';
 
 type Item = { id: string; text?: string };
 
 const START: CursorState = { up: null, seam: null, returned: '' };
 const project = (item: unknown) => ({ id: (item as Item).id, text: (item as Item).text });
-const prints = (...ids: string[]) => ids.map(fingerprint).join('');
+const prints = (...ids: string[]) => ids.map(idKey).join('');
 
 /**
  * A fake upstream timeline (newest first) with cursor-based pages, like the real proxy:
@@ -209,6 +210,38 @@ describe('paginate', () => {
     ['pages that hold only duplicates', [['1000', '1001'], ['1001', '1001'], ['1001'], ['1001', '1004']], 2, ['1000', '1001', '1004']]
   ])('drains %s', async (_name, pages, count, expected) => {
     expect(await drain(pagedFetch(pages), count)).toEqual(expected);
+  });
+
+  it('records entries without a numeric id, so they are returned once and the page moves on', async () => {
+    const tombstone = { type: 'tombstone', reason: 'deleted' };
+    const fetchPage = async (up: string | null): Promise<Page> =>
+      up === null ? { items: [tombstone, { id: '1001' }, tombstone], bottom: 'p2' } : { items: [], bottom: 'p3' };
+    const seen: unknown[] = [];
+    let state = START;
+    for (let call = 0; call < 10; call++) {
+      const result = await paginate({ state, count: 1, fetchPage, project: (item: unknown) => item });
+      seen.push(...result.items);
+      if (!result.hasMore) break;
+      state = result.next!;
+    }
+    expect(seen).toEqual([tombstone, { id: '1001' }]);
+  });
+
+  it('keeps exact ids, so distinct ids never collide', async () => {
+    // These two ids share an FNV-1a 32-bit hash.
+    expect(await drain(pagedFetch([['2000000000001522232', '2000000000000412299']]), 1)).toEqual([
+      '2000000000001522232',
+      '2000000000000412299'
+    ]);
+  });
+
+  it('reads a page larger than a cursor can track when few calls are needed, and refuses to cycle otherwise', async () => {
+    const ids = Array.from({ length: 202 }, (_, i) => String(10_000 + i));
+    expect(await drain(pagedFetch([ids]), 100)).toEqual(ids);
+
+    const error = await drain(pagedFetch([ids]), 1).catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(ToolError);
+    expect(error).toMatchObject({ code: 'upstream_unavailable', retryable: false });
   });
 
   it('stays lossless when a duplicated post loses one of its entries between calls', async () => {

@@ -3,7 +3,7 @@
  * - scope binds the cursor to the tool and its arguments
  * - up is the upstream cursor of the page being sliced (null = newest page)
  * - seam is the last id of the previous upstream page, skipped if it shows up again on this page
- * - returned holds 8-hex-digit fingerprints of the ids already returned from this page (see paginate.ts)
+ * - returned holds 13-character keys of the items already returned from this page (see paginate.ts)
  * The checksum only detects corruption (e.g. a model dropping characters); cursors are not a security boundary.
  */
 import { corruptCursor, cursorScopeMismatch, cursorVersion } from '../contract/messages';
@@ -26,7 +26,7 @@ export const MAX_UPSTREAM_CURSOR = 512;
 /** Bottom cursors the server issues: printable ASCII except quote and backslash, so their encoded size is predictable. */
 const UPSTREAM_CURSOR_RE = /^[\x21\x23-\x5B\x5D-\x7E]{1,512}$/;
 const SEAM_RE = /^\d{1,20}$/;
-const RETURNED_RE = new RegExp(`^(?:[0-9a-f]{8}){0,${CURSOR_MAX_RETURNED}}$`);
+const RETURNED_RE = new RegExp(`^(?:[0-9a-z]{13}){0,${CURSOR_MAX_RETURNED}}$`);
 const MAX_SCOPE_LENGTH = 80;
 const START: CursorState = { up: null, seam: null, returned: '' };
 

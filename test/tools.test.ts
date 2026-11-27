@@ -218,6 +218,21 @@ describe('get_profile_statuses', () => {
     expect(fake.urls[0]?.searchParams.get('cursor')).toBe('page two');
   });
 
+  it('replaces a post too large even in concise form with a small stub', async () => {
+    const page = timelinePage({ size: 2 });
+    (page.results[0] as Record<string, unknown>).card = { url: `https://example.com/${'u'.repeat(40_000)}`, title: 'Huge' };
+    const result = await call(await connect(fakeUpstream(() => json(page)).fetch), 'get_profile_statuses', {
+      handle: 'jack',
+      count: 2,
+      cursor: '\u0001'.repeat(500)
+    });
+
+    expect(result.text.length).toBeLessThanOrEqual(30_000);
+    const posts = result.data.posts as Record<string, unknown>[];
+    expect(posts[0]).toEqual({ id: '3000000000000000120', url: 'https://x.com/example_dev/status/3000000000000000120', unavailable: 'too_large' });
+    expect(posts[1]).toMatchObject({ id: '3000000000000000119' });
+  });
+
   it('keeps detailed results under 30,000 characters even with the longest cursor', async () => {
     const page = timelinePage({ size: 3, bottom: 'b'.repeat(512) });
     for (const item of page.results) {
@@ -328,11 +343,11 @@ describe('get_profile_statuses', () => {
     expect(both.data.note).toBe('Posts too large for detailed form are returned in concise form.');
 
     // The first item nearly fills the budget, so the oversized second item is projected (concise) but not returned.
-    const budget = itemBudgetFor(scopeKey({ tool: 'get_profile_statuses', handle: 'jack', includeReplies: false }), {
-      up: null,
-      seam: null,
-      returned: ''
-    });
+    const budget = itemBudgetFor(
+      scopeKey({ tool: 'get_profile_statuses', handle: 'jack', includeReplies: false }),
+      { up: null, seam: null, returned: '' },
+      2
+    );
     const deferred = timelinePage({ size: 2 });
     const first = deferred.results[0] as Record<string, unknown>;
     first.text = '';

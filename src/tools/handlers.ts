@@ -17,9 +17,10 @@ import {
 } from '../contract/messages';
 import type { ResponseFormat, ToolArgs } from '../contract/tools';
 import { decodeCursor, encodeCursor, isUpstreamCursor, MAX_UPSTREAM_CURSOR, scopeKey, type CursorState } from '../domain/cursor';
+import { KEY_LENGTH } from '../domain/paginate';
 import { parseHandleRef, parsePostRef } from '../domain/normalize';
 import { paginate, type Page, type PaginateResult } from '../domain/paginate';
-import { projectPost, projectTrend, projectTypeaheadUser, projectUser, stripMosaic } from '../domain/project';
+import { projectPost, projectTrend, projectTypeaheadUser, projectUser, stripMosaic, tooLargePost } from '../domain/project';
 import { routes, type Route } from '../upstream/routes';
 import type { UpstreamSession } from '../upstream/session';
 import type { ClassifyContext } from '../domain/classify';
@@ -104,6 +105,8 @@ type ListRequest = {
   route: (up: string | null) => Route;
   context: ClassifyContext;
   project: (raw: unknown) => unknown;
+  /** A small stand-in for an item whose concise form alone exceeds the budget (posts only). */
+  tooLarge?: (raw: unknown) => unknown;
   onEmptyFirstPage: EmptyFirstPage;
   onFirstPageServerError?: FirstPageServerError;
 };
@@ -115,9 +118,10 @@ const ENVELOPE_OVERHEAD = 600;
  * Characters left for list items once the envelope is accounted for: the longest next_cursor this call can issue
  * (continuing on the same upstream page, or moving to a new page with the longest issued bottom cursor) plus notes.
  */
-export function itemBudgetFor(scope: string, state: CursorState): number {
+export function itemBudgetFor(scope: string, state: CursorState, count: number): number {
   const id = '9'.repeat(20);
-  const samePage = encodeCursor(scope, { up: state.up, seam: id, returned: 'f'.repeat(8 * CURSOR_MAX_RETURNED) }).length;
+  const keys = Math.min(CURSOR_MAX_RETURNED, state.returned.length / KEY_LENGTH + count);
+  const samePage = encodeCursor(scope, { up: state.up, seam: id, returned: 'z'.repeat(KEY_LENGTH * keys) }).length;
   const nextPage = encodeCursor(scope, { up: 'x'.repeat(MAX_UPSTREAM_CURSOR), seam: id, returned: '' }).length;
   return MAX_RESULT_CHARS - ENVELOPE_OVERHEAD - Math.max(samePage, nextPage);
 }
@@ -125,16 +129,24 @@ export function itemBudgetFor(scope: string, state: CursorState): number {
 async function listPage(request: ListRequest): Promise<Rec> {
   const { session, kind, scope, count, format } = request;
   const state = decodeCursor(request.cursor, scope);
-  const budget = itemBudgetFor(scope, state);
-  // Items that were too large for detailed form and came back concise instead.
+  const budget = itemBudgetFor(scope, state, count);
+  // Items that were too large for detailed form and came back concise, or too large even for that.
   const fallbacks = new WeakSet<object>();
+  const stubs = new WeakSet<object>();
+  const concise = (raw: unknown) => {
+    const projected = request.project(raw);
+    if (request.tooLarge === undefined || fits(projected, budget)) return projected;
+    const stub = request.tooLarge(raw);
+    if (typeof stub === 'object' && stub !== null) stubs.add(stub);
+    return stub;
+  };
   const project = (raw: unknown) => {
-    if (format === 'concise') return request.project(raw);
+    if (format === 'concise') return concise(raw);
     const detailed = stripMosaic(raw);
     if (fits(detailed, budget)) return detailed;
-    const concise = request.project(raw);
-    if (typeof concise === 'object' && concise !== null) fallbacks.add(concise);
-    return concise;
+    const fallback = concise(raw);
+    if (typeof fallback === 'object' && fallback !== null && !stubs.has(fallback)) fallbacks.add(fallback);
+    return fallback;
   };
   let serverErrorChecked = false;
   const fetchPage = async (up: string | null): Promise<Page> => {
@@ -161,11 +173,17 @@ async function listPage(request: ListRequest): Promise<Rec> {
     if ('note' in diagnosed) return { [kind.key]: [], returned: 0, has_more: false, note: diagnosed.note };
     result = diagnosed;
   }
-  const detailedFellBack = result.items.some((item) => typeof item === 'object' && item !== null && fallbacks.has(item));
-  return listEnvelope(kind, scope, count, result, detailedFellBack);
+  const returnedAny = (set: WeakSet<object>) => result.items.some((item) => typeof item === 'object' && item !== null && set.has(item));
+  return listEnvelope(kind, scope, count, result, { detailedFellBack: returnedAny(fallbacks), tooLarge: returnedAny(stubs) });
 }
 
-function listEnvelope(kind: ListKind, scope: string, count: number, result: PaginateResult<unknown>, detailedFellBack: boolean): Rec {
+function listEnvelope(
+  kind: ListKind,
+  scope: string,
+  count: number,
+  result: PaginateResult<unknown>,
+  flags: { detailedFellBack: boolean; tooLarge: boolean }
+): Rec {
   const returned = result.items.length;
   const envelope: Rec = { [kind.key]: result.items, returned, has_more: result.hasMore };
   if (result.hasMore && result.next !== undefined) envelope.next_cursor = encodeCursor(scope, result.next);
@@ -174,7 +192,8 @@ function listEnvelope(kind: ListKind, scope: string, count: number, result: Pagi
   if (result.truncated) parts.push(notes.budget(returned, kind.plural));
   else if (result.pageEnded) parts.push(notes.pageEnded(returned, count));
   if (result.endOfList && returned === 0) parts.push(notes.noMore(kind.plural));
-  if (detailedFellBack) parts.push(notes.detailedItemsTooLarge(kind.plural));
+  if (flags.detailedFellBack) parts.push(notes.detailedItemsTooLarge(kind.plural));
+  if (flags.tooLarge) parts.push(notes.itemsTooLarge(kind.plural));
   if (parts.length > 0) envelope.note = parts.join(' ');
   return envelope;
 }
@@ -250,6 +269,7 @@ export async function getProfileStatuses(args: ToolArgs<'get_profile_statuses'>,
     route: (up) => routes.statuses(handle, { cursor: up, withReplies }),
     context: { handle },
     project: projectListPost,
+    tooLarge: tooLargePost,
     onEmptyFirstPage: diagnoseAccount(session, handle, {
       emptyNote: `@${handle} has no posts.`,
       counter: 'statuses',
@@ -273,6 +293,7 @@ export async function getProfileMedia(args: ToolArgs<'get_profile_media'>, { ses
     route: (up) => routes.media(handle, { cursor: up }),
     context: { handle },
     project: projectListPost,
+    tooLarge: tooLargePost,
     onEmptyFirstPage: diagnoseAccount(session, handle, {
       emptyNote: `@${handle} has no posts with photos or videos.`,
       counter: 'media_count',
@@ -294,6 +315,7 @@ export async function getProfileArticles(args: ToolArgs<'get_profile_articles'>,
     route: (up) => routes.articles(handle, { cursor: up }),
     context: { handle },
     project: projectListPost,
+    tooLarge: tooLargePost,
     onEmptyFirstPage: diagnoseAccount(session, handle, { emptyNote: `@${handle} has no Articles.`, what: 'Articles' }),
     onFirstPageServerError: checkAccountOnServerError(session, handle)
   });
@@ -375,6 +397,7 @@ export async function searchPosts(args: ToolArgs<'search_posts'>, { session }: T
     route: (up) => routes.search({ q, feed, cursor: up }),
     context: { q },
     project: projectListPost,
+    tooLarge: tooLargePost,
     onEmptyFirstPage: async () => ({ note: notes.noSearchResults })
   });
 }
