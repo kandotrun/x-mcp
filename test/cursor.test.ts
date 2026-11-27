@@ -62,6 +62,18 @@ describe('encodeCursor / decodeCursor', () => {
     expect(encodeCursor(STATUSES, { up: 'x'.repeat(512), off: 200, anc: '12345678901234567890', seam: '12345678901234567890' }).length).toBeLessThanOrEqual(1024);
   });
 
+  it('passes any 0.1 cursor string (up to 500 characters) through verbatim and round-trips it', () => {
+    for (const raw of ['page two', ' padded ', 'quote"and\\backslash', '日本語のカーソル', '\u0001ctrl', 'x'.repeat(500)]) {
+      expect(decodeCursor(raw, STATUSES)).toEqual({ up: raw, off: 0, anc: null, seam: null });
+      const next = encodeCursor(STATUSES, { up: raw, off: 200, anc: '12345678901234567890', seam: '12345678901234567890' });
+      expect(next.length).toBeLessThanOrEqual(8192);
+      expect(decodeCursor(next, STATUSES).up).toBe(raw);
+    }
+    const worst = encodeCursor('st:' + 'a'.repeat(30), { up: '\u0001'.repeat(512), off: 200, anc: '9'.repeat(20), seam: '9'.repeat(20) });
+    expect(worst.length).toBeLessThanOrEqual(8192);
+    expect(decodeCursor(worst, 'st:' + 'a'.repeat(30)).up).toBe('\u0001'.repeat(512));
+  });
+
   it('treats a missing or blank cursor as the newest page', () => {
     expect(decodeCursor(undefined, STATUSES)).toEqual({ up: null, off: 0, anc: null, seam: null });
     expect(decodeCursor('  ', STATUSES)).toEqual({ up: null, off: 0, anc: null, seam: null });
@@ -80,8 +92,8 @@ describe('encodeCursor / decodeCursor', () => {
 
     expect(codeOf(() => decodeCursor(changed, STATUSES))).toBe(c1);
     expect(codeOf(() => decodeCursor(cursor.slice(0, -3), STATUSES))).toBe(c1);
-    expect(codeOf(() => decodeCursor('not a cursor!', STATUSES))).toBe(c1);
-    expect(codeOf(() => decodeCursor('x'.repeat(1025), STATUSES))).toBe(c1);
+    expect(codeOf(() => decodeCursor('x'.repeat(8193), STATUSES))).toBe(c1);
+    expect(codeOf(() => decodeCursor('x'.repeat(513), STATUSES))).toBe(c1);
   });
 
   it('rejects a payload with out-of-range fields even when the checksum matches (C1)', () => {
@@ -90,7 +102,8 @@ describe('encodeCursor / decodeCursor', () => {
       return `${body}.${fnv1a32(body)}`;
     };
     expect(codeOf(() => decodeCursor(forge(['st:nasa', null, 201, null, null]), STATUSES))).toMatch(/^invalid_cursor/);
-    expect(codeOf(() => decodeCursor(forge(['st:nasa', 'has space', 0, null, null]), STATUSES))).toMatch(/^invalid_cursor/);
+    expect(codeOf(() => decodeCursor(forge(['st:nasa', '', 0, null, null]), STATUSES))).toMatch(/^invalid_cursor/);
+    expect(codeOf(() => decodeCursor(forge(['st:nasa', 'x'.repeat(513), 0, null, null]), STATUSES))).toMatch(/^invalid_cursor/);
     expect(codeOf(() => decodeCursor(forge(['st:nasa', null, 0, 'abc', null]), STATUSES))).toMatch(/^invalid_cursor/);
     expect(codeOf(() => decodeCursor(forge(['st:nasa', null, 0, null, 'abc']), STATUSES))).toMatch(/^invalid_cursor/);
     expect(codeOf(() => decodeCursor(forge(['st:nasa', null, 0, null]), STATUSES))).toMatch(/^invalid_cursor/);

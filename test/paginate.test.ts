@@ -168,6 +168,23 @@ describe('paginate', () => {
     expect(seen).toEqual(['91', '89', '88', '87', '86']);
   });
 
+  it('keeps the in-page anchor on the last returned item when it skips the previous page anchor', async () => {
+    let p2 = [{ id: '88' }, { id: '87' }, { id: '89' }, { id: '86' }, { id: '89' }];
+    const fetchPage = async (up: string | null): Promise<Page> =>
+      up === 'p2' ? { items: p2, bottom: 'p3' } : up === 'p3' ? { items: [], bottom: 'p4' } : { items: [{ id: '91' }, { id: '89' }], bottom: 'p2' };
+    const seen: string[] = [];
+    let state: CursorState = { up: null, off: 0, anc: null, seam: null };
+    for (let call = 0; call < 12; call++) {
+      const result = await paginate({ state, count: 1, fetchPage, project });
+      seen.push(...result.items.map((item) => item.id));
+      // After 87 is returned, the first (seam) 89 disappears from the page.
+      if (result.items[0]?.id === '87') p2 = [{ id: '88' }, { id: '87' }, { id: '86' }, { id: '89' }];
+      if (!result.hasMore) break;
+      state = result.next!;
+    }
+    expect(seen).toEqual(['91', '89', '88', '87', '86']);
+  });
+
   it('never returns an item twice when the upstream repeats it on the same page', async () => {
     const timeline = new FakeTimeline(6, 6);
     timeline.items.splice(3, 0, { id: timeline.items[1]!.id });

@@ -85,12 +85,15 @@ export async function paginate<T>(options: PaginateOptions<T>): Promise<Paginate
     const out: T[] = [];
     let used = 2;
     let truncated = false;
-    let lastHandled = anc;
+    // The in-page anchor is the last returned item: a skipped duplicate is ambiguous and must not become the anchor.
+    let lastReturned = anc;
+    // The last id seen on this page, returned or skipped, becomes the seam for the next page.
+    let lastOnPage = anc;
     let i = start;
     for (; i < items.length; i++) {
       const id = anchorId(items[i]);
       if (id !== undefined && seen.has(id)) {
-        lastHandled = id;
+        lastOnPage = id;
         continue;
       }
       if (out.length === count) break;
@@ -104,12 +107,13 @@ export async function paginate<T>(options: PaginateOptions<T>): Promise<Paginate
       used += size;
       if (id !== undefined) {
         seen.add(id);
-        lastHandled = id;
+        lastReturned = id;
+        lastOnPage = id;
       }
     }
 
     if (i < items.length) {
-      return { ...base, items: out, hasMore: true, next: { up, off: i, anc: lastHandled, seam }, truncated, shifted };
+      return { ...base, items: out, hasMore: true, next: { up, off: i, anc: lastReturned, seam }, truncated, shifted };
     }
     // A bottom cursor equal to the one we asked with means the upstream did not advance.
     const bottom = page.bottom && page.bottom !== up ? page.bottom : null;
@@ -117,8 +121,8 @@ export async function paginate<T>(options: PaginateOptions<T>): Promise<Paginate
       hopped = true;
       up = bottom;
       off = 0;
-      anc = lastHandled;
-      seam = lastHandled;
+      anc = lastOnPage;
+      seam = lastOnPage;
       continue;
     }
     if (out.length === 0 && hopped) {
@@ -130,7 +134,7 @@ export async function paginate<T>(options: PaginateOptions<T>): Promise<Paginate
         ...base,
         items: out,
         hasMore: true,
-        next: { up: bottom, off: 0, anc: lastHandled, seam: lastHandled },
+        next: { up: bottom, off: 0, anc: lastOnPage, seam: lastOnPage },
         pageEnded: out.length < count,
         shifted
       };

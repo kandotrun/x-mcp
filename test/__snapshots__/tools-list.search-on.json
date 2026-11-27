@@ -31,7 +31,7 @@
         "cursor": {
           "description": "Omit for the newest results. To continue, pass next_cursor from the previous result of this tool exactly as returned, with the same q and feed.",
           "type": "string",
-          "maxLength": 1024
+          "maxLength": 8192
         },
         "response_format": {
           "default": "concise",
@@ -162,7 +162,7 @@
         "cursor": {
           "description": "Omit for the newest results. To continue, pass next_cursor from the previous result of this tool exactly as returned, with the same handle and include_replies value.",
           "type": "string",
-          "maxLength": 1024
+          "maxLength": 8192
         },
         "include_replies": {
           "default": false,
@@ -217,7 +217,7 @@
         "cursor": {
           "description": "Omit for the newest results. To continue, pass next_cursor from the previous result of this tool exactly as returned, with the same handle.",
           "type": "string",
-          "maxLength": 1024
+          "maxLength": 8192
         },
         "response_format": {
           "default": "concise",
@@ -349,7 +349,7 @@
         "cursor": {
           "description": "Omit for the newest results. To continue, pass next_cursor from the previous result of this tool exactly as returned, with the same handle.",
           "type": "string",
-          "maxLength": 1024
+          "maxLength": 8192
         },
         "response_format": {
           "default": "concise",
@@ -399,7 +399,7 @@
         "cursor": {
           "description": "Omit for the newest results. To continue, pass next_cursor from the previous result of this tool exactly as returned, with the same handle.",
           "type": "string",
-          "maxLength": 1024
+          "maxLength": 8192
         },
         "response_format": {
           "default": "concise",
@@ -449,7 +449,7 @@
         "cursor": {
           "description": "Omit for the newest results. To continue, pass next_cursor from the previous result of this tool exactly as returned, with the same handle.",
           "type": "string",
-          "maxLength": 1024
+          "maxLength": 8192
         },
         "response_format": {
           "default": "concise",
@@ -499,7 +499,7 @@
         "cursor": {
           "description": "Omit for the newest results. To continue, pass next_cursor from the previous result of this tool exactly as returned, with the same id.",
           "type": "string",
-          "maxLength": 1024
+          "maxLength": 8192
         },
         "response_format": {
           "default": "concise",

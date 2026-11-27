@@ -209,6 +209,29 @@ describe('get_profile_statuses', () => {
     expect(fake.paths()).toEqual(['/2/profile/jack/statuses?cursor=DAAHCgABHYHlojO__-oLAAIAAAA&with_replies=1']);
   });
 
+  it('forwards a 0.1 cursor string verbatim', async () => {
+    const fake = fakeUpstream(() => json(timelinePage()));
+    await call(await connect(fake.fetch), 'get_profile_statuses', { handle: 'jack', cursor: 'page two' });
+
+    expect(fake.urls[0]?.searchParams.get('cursor')).toBe('page two');
+  });
+
+  it('keeps detailed results under 30,000 characters even with the longest cursor', async () => {
+    const page = timelinePage({ size: 3, bottom: 'b'.repeat(512) });
+    for (const item of page.results) {
+      const raw = item as Record<string, unknown>;
+      raw.text = '';
+      raw.text = 'w'.repeat(14_200 - JSON.stringify(stripMosaic(raw)).length);
+    }
+    const client = await connect(fakeUpstream(() => json(page)).fetch);
+    for (const cursor of [undefined, '\u0001'.repeat(500)]) {
+      const result = await call(client, 'get_profile_statuses', { handle: 'jack', count: 3, response_format: 'detailed', ...(cursor ? { cursor } : {}) });
+      expect(result.isError).toBe(false);
+      expect(result.text.length).toBeLessThanOrEqual(30_000);
+      expect(result.data.next_cursor).toEqual(expect.any(String));
+    }
+  });
+
   it('rejects a cursor issued for another account', async () => {
     const client = await connect(fakeUpstream(() => json(timelinePage())).fetch);
     const first = await call(client, 'get_profile_statuses', { handle: 'jack', count: 1 });
@@ -300,7 +323,7 @@ describe('get_profile_statuses', () => {
       count: 2,
       response_format: 'detailed'
     });
-    expect(both.data.note).toBe('Posts over 29,000 characters in detailed form are returned in concise form.');
+    expect(both.data.note).toBe('Posts too large for detailed form are returned in concise form.');
 
     // The first item nearly fills the budget, so the oversized second item is projected (concise) but not returned.
     const deferred = timelinePage({ size: 2 });

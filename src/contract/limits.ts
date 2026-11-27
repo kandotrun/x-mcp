@@ -19,7 +19,8 @@ export const MAX_UPSTREAM_REQUESTS_PER_CALL = 3;
 /** Shared by every tool call of one HTTP request, so a JSON-RPC batch cannot multiply upstream load. */
 export const MAX_UPSTREAM_REQUESTS_PER_HTTP_REQUEST = 10;
 
-export const CURSOR_MAX_LEN = 1_024;
+/** Long enough for a next_cursor that carries a 0.1 raw cursor of any content (JSON escaping, UTF-8). */
+export const CURSOR_MAX_LEN = 8_192;
 export const CURSOR_MAX_OFFSET = 200;
 
 export const TRENDS_UPSTREAM_MAX = 50;

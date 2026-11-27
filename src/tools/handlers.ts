@@ -5,7 +5,7 @@
 import type { Config } from '../config';
 import type { PostItem, User } from '../contract/envelopes';
 import { ToolError } from '../contract/errors';
-import { ITEM_BUDGET, MAX_RESULT_CHARS, TRENDS_UPSTREAM_MAX } from '../contract/limits';
+import { CURSOR_MAX_OFFSET, ITEM_BUDGET, MAX_RESULT_CHARS, TRENDS_UPSTREAM_MAX } from '../contract/limits';
 import {
   accountProtected,
   emptyQuery,
@@ -16,7 +16,7 @@ import {
   unexpectedResponse
 } from '../contract/messages';
 import type { ResponseFormat, ToolArgs } from '../contract/tools';
-import { decodeCursor, encodeCursor, isUpstreamCursor, scopeKey } from '../domain/cursor';
+import { decodeCursor, encodeCursor, isUpstreamCursor, MAX_UPSTREAM_CURSOR, scopeKey, type CursorState } from '../domain/cursor';
 import { parseHandleRef, parsePostRef } from '../domain/normalize';
 import { paginate, type Page, type PaginateResult } from '../domain/paginate';
 import { projectPost, projectTrend, projectTypeaheadUser, projectUser, stripMosaic } from '../domain/project';
@@ -108,15 +108,30 @@ type ListRequest = {
   onFirstPageServerError?: FirstPageServerError;
 };
 
+/** Keys, counts and the longest combination of notes in a list envelope. */
+const ENVELOPE_OVERHEAD = 600;
+
+/**
+ * Characters left for list items once the envelope is accounted for: the longest next_cursor this call can issue
+ * (continuing on the same upstream page, or moving to a new page with the longest issued bottom cursor) plus notes.
+ */
+function itemBudgetFor(scope: string, state: CursorState): number {
+  const id = '9'.repeat(20);
+  const samePage = encodeCursor(scope, { up: state.up, off: CURSOR_MAX_OFFSET, anc: id, seam: id }).length;
+  const nextPage = encodeCursor(scope, { up: 'x'.repeat(MAX_UPSTREAM_CURSOR), off: 0, anc: id, seam: id }).length;
+  return MAX_RESULT_CHARS - ENVELOPE_OVERHEAD - Math.max(samePage, nextPage);
+}
+
 async function listPage(request: ListRequest): Promise<Rec> {
   const { session, kind, scope, count, format } = request;
   const state = decodeCursor(request.cursor, scope);
+  const budget = itemBudgetFor(scope, state);
   // Items that were too large for detailed form and came back concise instead.
   const fallbacks = new WeakSet<object>();
   const project = (raw: unknown) => {
     if (format === 'concise') return request.project(raw);
     const detailed = stripMosaic(raw);
-    if (fits(detailed, ITEM_BUDGET)) return detailed;
+    if (fits(detailed, budget)) return detailed;
     const concise = request.project(raw);
     if (typeof concise === 'object' && concise !== null) fallbacks.add(concise);
     return concise;
@@ -137,7 +152,7 @@ async function listPage(request: ListRequest): Promise<Rec> {
     const bottom = rec(outcome.body.cursor)?.bottom;
     return { items: arr(outcome.body.results), bottom: isUpstreamCursor(bottom) ? bottom : null };
   };
-  const run = () => paginate({ state, count, fetchPage, project });
+  const run = () => paginate({ state, count, fetchPage, project, budget });
 
   let result = await run();
   if (result.firstPageEmpty) {

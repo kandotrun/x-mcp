@@ -43,7 +43,7 @@ const E = {
   handle: 'handle must be a string of 1-512 characters, e.g. "nasa", "@nasa" or "https://x.com/nasa".',
   count: 'count must be a whole number from 1 to 100 (default 10).',
   cursor:
-    'cursor must be the next_cursor string from a previous result of this tool, passed back unchanged (at most 1024 characters).',
+    'cursor must be the next_cursor string from a previous result of this tool, passed back unchanged (at most 8192 characters).',
   format: 'response_format must be "concise" (default) or "detailed".',
   feed: 'feed must be "latest" (default) or "top".',
   q: 'q must be a search string of 1-500 characters, e.g. "from:nasa artemis".',
@@ -74,7 +74,7 @@ const cursorParam = (same: string) =>
   opt(
     z
       .string({ error: E.cursor })
-      .max(1024, { error: E.cursor })
+      .max(8192, { error: E.cursor })
       .optional()
       .describe(
         `Omit for the newest results. To continue, pass next_cursor from the previous result of this tool exactly as returned, with the same ${same}.`

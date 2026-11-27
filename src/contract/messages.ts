@@ -3,7 +3,7 @@
  * Messages never include upstream bodies or URLs; caller input is rendered through echo().
  */
 import { ToolError } from './errors';
-import { ITEM_BUDGET, MAX_RESULT_CHARS, TRENDS_UPSTREAM_MAX, UPSTREAM_TIMEOUT_MS } from './limits';
+import { MAX_RESULT_CHARS, TRENDS_UPSTREAM_MAX, UPSTREAM_TIMEOUT_MS } from './limits';
 import { echo } from '../domain/text';
 
 const ISSUES_URL = 'https://github.com/kandotrun/x-mcp/issues';
@@ -369,7 +369,7 @@ export const notes = {
   pageShifted: (plural: string) => `The upstream page changed since the previous call, so some ${plural} may repeat.`,
   detailedTooLarge: `The detailed object exceeded ${formatChars(MAX_RESULT_CHARS)} characters, so the concise form is returned.`,
   detailedItemsTooLarge: (plural: string) =>
-    `${plural[0]?.toUpperCase() ?? ''}${plural.slice(1)} over ${formatChars(ITEM_BUDGET)} characters in detailed form are returned in concise form.`,
+    `${plural[0]?.toUpperCase() ?? ''}${plural.slice(1)} too large for detailed form are returned in concise form.`,
   noPostsWithoutReplies: (handle: string, listed: number) =>
     `X returned no posts without replies for @${handle}, although its profile lists ${listed} posts; try include_replies=true.`,
   noTrends: 'The upstream returned no trends right now; this is not an error in your request.',

@@ -22,7 +22,9 @@ export type CursorScope =
   | { tool: 'search_posts'; feed: string; q: string };
 
 const PREFIX = 'xc1.';
-/** Upstream cursors are opaque: any printable ASCII token except quote and backslash, short enough to fit in a cursor. */
+/** Longest upstream cursor carried inside a next_cursor (0.1 accepted raw cursors of up to 500 characters). */
+export const MAX_UPSTREAM_CURSOR = 512;
+/** Bottom cursors the server issues: printable ASCII except quote and backslash, so their encoded size is predictable. */
 const UPSTREAM_CURSOR_RE = /^[\x21\x23-\x5B\x5D-\x7E]{1,512}$/;
 const ANCHOR_RE = /^\d{1,20}$/;
 const MAX_SCOPE_LENGTH = 80;
@@ -36,9 +38,14 @@ const HANDLE_SCOPES: Record<string, string> = {
   fg: 'get_profile_following'
 };
 
-/** Whether an upstream bottom cursor can be carried inside a next_cursor. The same rule applies when decoding. */
+/** Whether an upstream bottom cursor is issued inside a next_cursor (anything issued is also accepted, see below). */
 export function isUpstreamCursor(value: unknown): value is string {
   return typeof value === 'string' && UPSTREAM_CURSOR_RE.test(value);
+}
+
+/** Upstream cursors accepted inside a next_cursor or as a 0.1 raw cursor: any non-empty string up to 512 characters. */
+function isCarriedCursor(value: unknown): value is string {
+  return typeof value === 'string' && value.length >= 1 && value.length <= MAX_UPSTREAM_CURSOR;
 }
 
 export function scopeKey(scope: CursorScope): string {
@@ -80,9 +87,10 @@ export function encodeCursor(scope: string, state: CursorState): string {
 }
 
 export function decodeCursor(input: string | undefined, expectedScope: string): CursorState {
-  const value = (input ?? '').trim();
+  const raw = input ?? '';
+  const value = raw.trim();
   if (value === '') return START;
-  if (value.length > CURSOR_MAX_LEN) throw corruptCursor();
+  if (raw.length > CURSOR_MAX_LEN) throw corruptCursor();
 
   if (value.startsWith(PREFIX)) {
     const parts = value.split('.');
@@ -95,8 +103,8 @@ export function decodeCursor(input: string | undefined, expectedScope: string): 
     return decoded.state;
   }
   if (/^xc\d+\./.test(value)) throw cursorVersion();
-  // An unversioned value is a 0.1 raw upstream cursor (data.cursor.bottom); pass it through unbound.
-  if (isUpstreamCursor(value)) return { up: value, off: 0, anc: null, seam: null };
+  // An unversioned value is a 0.1 raw upstream cursor (data.cursor.bottom); 0.1 forwarded any string verbatim.
+  if (isCarriedCursor(raw)) return { up: raw, off: 0, anc: null, seam: null };
   throw corruptCursor();
 }
 
@@ -112,7 +120,7 @@ function parsePayload(payload: string): { scope: string; state: CursorState } {
   const valid =
     typeof scope === 'string' &&
     scope.length <= MAX_SCOPE_LENGTH &&
-    (up === null || isUpstreamCursor(up)) &&
+    (up === null || isCarriedCursor(up)) &&
     typeof off === 'number' &&
     Number.isInteger(off) &&
     off >= 0 &&
