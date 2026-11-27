@@ -32,7 +32,7 @@ async function callTool(client: Client, name: string, toolArgs: Record<string, u
   try {
     data = JSON.parse(text) as Record<string, unknown>;
   } catch {
-    // validation errors are plain text
+    // every tool result, including errors, should be JSON; a parse failure fails the checks below
   }
   return { isError: result.isError === true, data, text };
 }
@@ -67,9 +67,14 @@ async function main(): Promise<void> {
     check(!profile.isError && (profile.data.user as { handle?: string } | undefined)?.handle?.toLowerCase() === 'jack', 'get_profile @jack', profile.text);
 
     const first = await callTool(client, 'get_profile_statuses', { handle: 'jack', count: 2 });
-    check(!first.isError && Number(first.data.returned) <= 2 && first.data.has_more === true, 'get_profile_statuses enforces count=2', first.text.slice(0, 300));
+    const hasCursor = typeof first.data.next_cursor === 'string' && first.data.next_cursor !== '';
+    check(
+      !first.isError && Number(first.data.returned) <= 2 && first.data.has_more === true && hasCursor,
+      'get_profile_statuses enforces count=2 and returns next_cursor',
+      first.text.slice(0, 300)
+    );
     check(first.text.length < 10_000, `get_profile_statuses count=2 result is small (${first.text.length} chars)`);
-    if (typeof first.data.next_cursor === 'string') {
+    if (hasCursor) {
       const second = await callTool(client, 'get_profile_statuses', { handle: 'jack', count: 2, cursor: first.data.next_cursor });
       const firstIds = (first.data.posts as { id?: string }[]).map((item) => item.id);
       const secondIds = ((second.data.posts as { id?: string }[] | undefined) ?? []).map((item) => item.id);

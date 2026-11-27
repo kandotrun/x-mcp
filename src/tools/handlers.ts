@@ -4,6 +4,7 @@
  */
 import type { Config } from '../config';
 import type { PostItem, User } from '../contract/envelopes';
+import { ToolError } from '../contract/errors';
 import { ITEM_BUDGET, MAX_RESULT_CHARS, TRENDS_UPSTREAM_MAX } from '../contract/limits';
 import {
   accountProtected,
@@ -15,7 +16,7 @@ import {
   unexpectedResponse
 } from '../contract/messages';
 import type { ResponseFormat, ToolArgs } from '../contract/tools';
-import { decodeCursor, encodeCursor, scopeKey } from '../domain/cursor';
+import { decodeCursor, encodeCursor, isUpstreamCursor, scopeKey } from '../domain/cursor';
 import { parseHandleRef, parsePostRef } from '../domain/normalize';
 import { paginate, type Page, type PaginateResult } from '../domain/paginate';
 import { projectPost, projectTrend, projectTypeaheadUser, projectUser, stripMosaic } from '../domain/project';
@@ -63,7 +64,15 @@ function conciseSinglePost(raw: Rec): PostItem {
 
 export async function getProfile(args: ToolArgs<'get_profile'>, { session }: ToolContext) {
   const handle = parseHandleRef(args.handle);
-  const outcome = await session.fetch(routes.profile(handle, { aboutAccount: args.include_about }), { handle });
+  const route = routes.profile(handle, { aboutAccount: args.include_about });
+  let outcome;
+  try {
+    outcome = await session.fetch(route, { handle });
+  } catch (error) {
+    // The upstream occasionally answers "User not found" for accounts that exist, so ask once more.
+    if (!(error instanceof ToolError) || error.code !== 'not_found') throw error;
+    outcome = await session.fetch(route, { handle });
+  }
   const user = outcome.kind === 'ok' ? rec(outcome.body.user) : undefined;
   if (user === undefined) throw unexpectedResponse();
   const note = user.protected === true ? notes.protectedProfile : undefined;
@@ -77,11 +86,13 @@ export async function getProfile(args: ToolArgs<'get_profile'>, { session }: Too
 // ---------------------------------------------------------------------------------------------
 // Lists
 
-type ListKind = { key: 'posts' | 'users'; plural: string; singular: string };
-const POSTS: ListKind = { key: 'posts', plural: 'posts', singular: 'post' };
-const USERS: ListKind = { key: 'users', plural: 'accounts', singular: 'account' };
+type ListKind = { key: 'posts' | 'users'; plural: string };
+const POSTS: ListKind = { key: 'posts', plural: 'posts' };
+const USERS: ListKind = { key: 'users', plural: 'accounts' };
 
 type EmptyFirstPage = (retry: () => Promise<PaginateResult<unknown>>) => Promise<PaginateResult<unknown> | { note: string }>;
+/** Runs when the newest page fails with HTTP 500; throws a more specific error when it can find one. */
+type FirstPageServerError = () => Promise<void>;
 
 type ListRequest = {
   session: UpstreamSession;
@@ -94,33 +105,48 @@ type ListRequest = {
   context: ClassifyContext;
   project: (raw: unknown) => unknown;
   onEmptyFirstPage: EmptyFirstPage;
+  onFirstPageServerError?: FirstPageServerError;
 };
 
 async function listPage(request: ListRequest): Promise<Rec> {
   const { session, kind, scope, count, format } = request;
   const state = decodeCursor(request.cursor, scope);
-  let detailedFellBack = false;
+  // Items that were too large for detailed form and came back concise instead.
+  const fallbacks = new WeakSet<object>();
   const project = (raw: unknown) => {
     if (format === 'concise') return request.project(raw);
     const detailed = stripMosaic(raw);
     if (fits(detailed, ITEM_BUDGET)) return detailed;
-    detailedFellBack = true;
-    return request.project(raw);
+    const concise = request.project(raw);
+    if (typeof concise === 'object' && concise !== null) fallbacks.add(concise);
+    return concise;
   };
+  let serverErrorChecked = false;
   const fetchPage = async (up: string | null): Promise<Page> => {
-    const outcome = await session.fetch(request.route(up), request.context);
+    let outcome;
+    try {
+      outcome = await session.fetch(request.route(up), request.context);
+    } catch (error) {
+      if (up === null && !serverErrorChecked && error instanceof ToolError && error.upstreamStatus === 500 && request.onFirstPageServerError) {
+        serverErrorChecked = true;
+        await request.onFirstPageServerError();
+      }
+      throw error;
+    }
     if (outcome.kind === 'empty') return { items: [], bottom: null };
     const bottom = rec(outcome.body.cursor)?.bottom;
-    return { items: arr(outcome.body.results), bottom: typeof bottom === 'string' && bottom !== '' ? bottom : null };
+    return { items: arr(outcome.body.results), bottom: isUpstreamCursor(bottom) ? bottom : null };
   };
   const run = () => paginate({ state, count, fetchPage, project });
 
   let result = await run();
   if (result.firstPageEmpty) {
+    serverErrorChecked = true;
     const diagnosed = await request.onEmptyFirstPage(run);
     if ('note' in diagnosed) return { [kind.key]: [], returned: 0, has_more: false, note: diagnosed.note };
     result = diagnosed;
   }
+  const detailedFellBack = result.items.some((item) => typeof item === 'object' && item !== null && fallbacks.has(item));
   return listEnvelope(kind, scope, count, result, detailedFellBack);
 }
 
@@ -132,9 +158,9 @@ function listEnvelope(kind: ListKind, scope: string, count: number, result: Pagi
   const parts: string[] = [];
   if (result.truncated) parts.push(notes.budget(returned, kind.plural));
   else if (result.pageEnded) parts.push(notes.pageEnded(returned, count));
-  if (result.shifted) parts.push(notes.pageShifted(kind.singular));
+  if (result.shifted) parts.push(notes.pageShifted(kind.plural));
   if (result.endOfList && returned === 0) parts.push(notes.noMore(kind.plural));
-  if (detailedFellBack) parts.push(notes.detailedTooLarge);
+  if (detailedFellBack) parts.push(notes.detailedItemsTooLarge(kind.plural));
   if (parts.length > 0) envelope.note = parts.join(' ');
   return envelope;
 }
@@ -146,20 +172,53 @@ function listEnvelope(kind: ListKind, scope: string, count: number, result: Pagi
 function diagnoseAccount(
   session: UpstreamSession,
   handle: string,
-  options: { emptyNote: string; counter?: 'statuses' | 'media_count' | 'followers' | 'following'; what: string }
+  options: {
+    emptyNote: string;
+    counter?: 'statuses' | 'media_count' | 'followers' | 'following';
+    what: string;
+    /** When the counter also counts items this listing excludes, an empty listing is valid and gets this note. */
+    listedButEmptyNote?: string;
+  }
 ): EmptyFirstPage {
   return async (retry) => {
-    const outcome = await session.fetch(routes.profile(handle, { aboutAccount: false }), { handle });
-    const user = outcome.kind === 'ok' ? rec(outcome.body.user) : undefined;
-    if (user === undefined) throw unexpectedResponse();
-    if (user.protected === true) throw accountProtected(handle);
+    const user = await lookUpAccount(session, handle);
     const listed = options.counter === undefined ? undefined : num(user[options.counter]);
     if (listed === undefined || listed === 0) return { note: options.emptyNote };
     const retried = await retry();
     if (retried.items.length > 0 || retried.hasMore) return retried;
+    if (options.listedButEmptyNote !== undefined) return { note: options.listedButEmptyNote };
     throw timelineMissing(handle, options.what, listed);
   };
 }
+
+/**
+ * The profile lookup behind the U11 diagnosis: 404 -> not_found/suspended, protected -> restricted.
+ * retryNotFound asks once more after a "not found", which the upstream occasionally returns for existing accounts.
+ */
+async function lookUpAccount(session: UpstreamSession, handle: string, retryNotFound = false): Promise<Rec> {
+  const route = routes.profile(handle, { aboutAccount: false });
+  let outcome;
+  try {
+    outcome = await session.fetch(route, { handle });
+  } catch (error) {
+    if (!retryNotFound || !(error instanceof ToolError) || error.code !== 'not_found') throw error;
+    outcome = await session.fetch(route, { handle });
+  }
+  const user = outcome.kind === 'ok' ? rec(outcome.body.user) : undefined;
+  if (user === undefined) throw unexpectedResponse();
+  if (user.protected === true) throw accountProtected(handle);
+  return user;
+}
+
+/**
+ * Account timelines answer HTTP 500 with an empty list for protected accounts; the profile tells them apart.
+ * Timeline + profile + one profile retry stays within the 3-request cap.
+ */
+const checkAccountOnServerError =
+  (session: UpstreamSession, handle: string): FirstPageServerError =>
+  async () => {
+    await lookUpAccount(session, handle, true);
+  };
 
 const projectListPost = (raw: unknown) => projectPost(raw, 'list');
 const projectListUser = (raw: unknown): User => projectUser(raw);
@@ -177,7 +236,14 @@ export async function getProfileStatuses(args: ToolArgs<'get_profile_statuses'>,
     route: (up) => routes.statuses(handle, { cursor: up, withReplies }),
     context: { handle },
     project: projectListPost,
-    onEmptyFirstPage: diagnoseAccount(session, handle, { emptyNote: `@${handle} has no posts.`, counter: 'statuses', what: 'posts' })
+    onEmptyFirstPage: diagnoseAccount(session, handle, {
+      emptyNote: `@${handle} has no posts.`,
+      counter: 'statuses',
+      what: 'posts',
+      // The statuses counter includes replies, so a reply-only account has an empty default timeline.
+      ...(withReplies ? {} : { listedButEmptyNote: notes.onlyReplies(handle) })
+    }),
+    onFirstPageServerError: checkAccountOnServerError(session, handle)
   });
 }
 
@@ -197,7 +263,8 @@ export async function getProfileMedia(args: ToolArgs<'get_profile_media'>, { ses
       emptyNote: `@${handle} has no posts with photos or videos.`,
       counter: 'media_count',
       what: 'media posts'
-    })
+    }),
+    onFirstPageServerError: checkAccountOnServerError(session, handle)
   });
 }
 
@@ -213,7 +280,8 @@ export async function getProfileArticles(args: ToolArgs<'get_profile_articles'>,
     route: (up) => routes.articles(handle, { cursor: up }),
     context: { handle },
     project: projectListPost,
-    onEmptyFirstPage: diagnoseAccount(session, handle, { emptyNote: `@${handle} has no Articles.`, what: 'Articles' })
+    onEmptyFirstPage: diagnoseAccount(session, handle, { emptyNote: `@${handle} has no Articles.`, what: 'Articles' }),
+    onFirstPageServerError: checkAccountOnServerError(session, handle)
   });
 }
 
@@ -229,7 +297,8 @@ export async function getProfileFollowers(args: ToolArgs<'get_profile_followers'
     route: (up) => routes.followers(handle, { cursor: up }),
     context: { handle },
     project: projectListUser,
-    onEmptyFirstPage: diagnoseAccount(session, handle, { emptyNote: `@${handle} has no followers.`, counter: 'followers', what: 'followers' })
+    onEmptyFirstPage: diagnoseAccount(session, handle, { emptyNote: `@${handle} has no followers.`, counter: 'followers', what: 'followers' }),
+    onFirstPageServerError: checkAccountOnServerError(session, handle)
   });
 }
 
@@ -249,7 +318,8 @@ export async function getProfileFollowing(args: ToolArgs<'get_profile_following'
       emptyNote: `@${handle} follows no accounts.`,
       counter: 'following',
       what: 'followed accounts'
-    })
+    }),
+    onFirstPageServerError: checkAccountOnServerError(session, handle)
   });
 }
 
@@ -265,7 +335,15 @@ export async function getPostReposts(args: ToolArgs<'get_post_reposts'>, { sessi
     route: (up) => routes.reposts(postId, { cursor: up }),
     context: { postId },
     project: projectListUser,
-    onEmptyFirstPage: async () => ({ note: notes.noReposts })
+    onEmptyFirstPage: async () => ({ note: notes.noReposts }),
+    // Reposts of an unknown or deleted post answer HTTP 500; the post itself answers 404 (not_found).
+    onFirstPageServerError: async () => {
+      const outcome = await session.fetch(routes.status(postId), { postId });
+      const status = outcome.kind === 'ok' ? rec(outcome.body.status) : undefined;
+      if (status !== undefined && status.type !== undefined && status.type !== 'status') {
+        throw RESTRICTED_REASONS.has(String(status.reason)) ? postRestricted(postId) : postNotFound(postId);
+      }
+    }
   });
 }
 

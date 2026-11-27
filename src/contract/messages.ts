@@ -3,7 +3,7 @@
  * Messages never include upstream bodies or URLs; caller input is rendered through echo().
  */
 import { ToolError } from './errors';
-import { MAX_RESULT_CHARS, TRENDS_UPSTREAM_MAX, UPSTREAM_TIMEOUT_MS } from './limits';
+import { ITEM_BUDGET, MAX_RESULT_CHARS, TRENDS_UPSTREAM_MAX, UPSTREAM_TIMEOUT_MS } from './limits';
 import { echo } from '../domain/text';
 
 const ISSUES_URL = 'https://github.com/kandotrun/x-mcp/issues';
@@ -72,12 +72,23 @@ export const nonXHost = (host: string) =>
     hint: 'Pass the bare handle, e.g. {"handle":"nasa"}.'
   });
 
-export const postLinkWithoutAccount = (input: string) =>
+export const postLinkWithoutAccount = () =>
   new ToolError({
     code: 'invalid_argument',
     retryable: false,
     message: 'This post link has no account name in it.',
-    hint: `Call get_post with {"id":"${echo(input)}"} and use post.author.handle.`
+    hint: 'Call get_post with this link as id and read post.author.handle.'
+  });
+
+/** Schema validation failures and unknown tools, reported by the MCP SDK before any handler runs. */
+export const invalidArguments = (detail: string) =>
+  new ToolError({
+    code: 'invalid_argument',
+    retryable: false,
+    message: detail.replace(/^MCP error -?\d+: /, ''),
+    hint: /^(MCP error -?\d+: )?Tool \S+ (not found|disabled)/.test(detail)
+      ? 'Use one of the tool names from tools/list.'
+      : "Fix the arguments as the error describes (see the tool's inputSchema) and call again."
   });
 
 export const emptyQuery = (tool: 'search_posts' | 'typeahead') =>
@@ -215,10 +226,11 @@ export const accountSuspended = (handle: string) =>
 export const accountNotFound = (handle: string) =>
   new ToolError({
     code: 'not_found',
-    retryable: false,
+    // The upstream occasionally answers "User not found" for accounts that exist.
+    retryable: true,
     upstreamStatus: 404,
     message: `No public X account named '${handle}' was found.`,
-    hint: 'Check the spelling (no @ needed; case-insensitive). If you have a link to one of its posts, call get_post with it and read post.author.handle.'
+    hint: 'Check the spelling (no @ needed; case-insensitive). If you are sure the account exists, retry once: the upstream occasionally answers not found for existing accounts.'
   });
 
 export const accountProtected = (handle: string) =>
@@ -235,6 +247,14 @@ export const timelineMissing = (handle: string, what: string, listed: number) =>
     retryable: true,
     message: `X returned no ${what} for @${handle} although its profile lists ${listed}.`,
     hint: 'This is usually temporary; retry once in a few seconds.'
+  });
+
+export const requestBudgetExhausted = (budget: number) =>
+  new ToolError({
+    code: 'rate_limited',
+    retryable: true,
+    message: `This HTTP request already made ${budget} upstream requests, the most one request may make.`,
+    hint: 'Send one tool call per request (JSON-RPC batches share one budget).'
   });
 
 export const rateLimited = (retryAfterSeconds: number) =>
@@ -338,8 +358,11 @@ export const notes = {
     `Stopped at ${returned} ${noun} to keep this result under ${formatChars(MAX_RESULT_CHARS)} characters; pass next_cursor as cursor for the rest.`,
   noMore: (noun: string) => `No more ${noun}.`,
   noSearchResults: 'No posts matched this query.',
-  pageShifted: (noun: string) => `The upstream page changed since the previous call, so one ${noun} may repeat.`,
+  pageShifted: (plural: string) => `The upstream page changed since the previous call, so some ${plural} may repeat.`,
   detailedTooLarge: `The detailed object exceeded ${formatChars(MAX_RESULT_CHARS)} characters, so the concise form is returned.`,
+  detailedItemsTooLarge: (plural: string) =>
+    `${plural[0]?.toUpperCase() ?? ''}${plural.slice(1)} over ${formatChars(ITEM_BUDGET)} characters in detailed form are returned in concise form.`,
+  onlyReplies: (handle: string) => `@${handle} has no posts other than replies; pass include_replies=true to see them.`,
   noTrends: 'The upstream returned no trends right now; this is not an error in your request.',
   trendsClamped: `count was reduced to ${TRENDS_UPSTREAM_MAX}, the upstream maximum.`,
   protectedProfile:

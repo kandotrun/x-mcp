@@ -21,7 +21,10 @@ export type CursorScope =
   | { tool: 'search_posts'; feed: string; q: string };
 
 const PREFIX = 'xc1.';
-const UPSTREAM_CURSOR_RE = /^[A-Za-z0-9+/=_|-]{1,512}$/;
+/** 0.1 raw upstream cursors seen in the wild: base64, base64url or "n|n". No ".", so they never look like xc1 cursors. */
+const LEGACY_CURSOR_RE = /^[A-Za-z0-9+/=_|-]{1,512}$/;
+/** Upstream cursors are opaque: any printable ASCII token except quote and backslash, short enough to fit in a cursor. */
+const UPSTREAM_CURSOR_RE = /^[\x21\x23-\x5B\x5D-\x7E]{1,512}$/;
 const ANCHOR_RE = /^\d{1,20}$/;
 const MAX_SCOPE_LENGTH = 80;
 const START: CursorState = { up: null, off: 0, anc: null };
@@ -33,6 +36,11 @@ const HANDLE_SCOPES: Record<string, string> = {
   fr: 'get_profile_followers',
   fg: 'get_profile_following'
 };
+
+/** Whether an upstream bottom cursor can be carried inside a next_cursor. The same rule applies when decoding. */
+export function isUpstreamCursor(value: unknown): value is string {
+  return typeof value === 'string' && UPSTREAM_CURSOR_RE.test(value);
+}
 
 export function scopeKey(scope: CursorScope): string {
   switch (scope.tool) {
@@ -61,7 +69,7 @@ export function describeScopeKey(key: string): string {
     if (kind === 'st+r') return `get_profile_statuses with include_replies=true for @${handle}`;
     return `${HANDLE_SCOPES[kind] ?? 'a different tool'} for @${handle}`;
   }
-  const repostScope = /^rp:(\d{2,20})$/.exec(key);
+  const repostScope = /^rp:(\d{1,30})$/.exec(key);
   if (repostScope) return `get_post_reposts for post ${repostScope[1]}`;
   if (/^sr:(latest|top):[0-9a-f]{8}$/.test(key)) return 'search_posts for a different query or feed';
   return 'a different call';
@@ -88,7 +96,7 @@ export function decodeCursor(input: string | undefined, expectedScope: string): 
     return decoded.state;
   }
   if (/^xc\d+\./.test(value)) throw cursorVersion();
-  if (UPSTREAM_CURSOR_RE.test(value)) return { up: value, off: 0, anc: null };
+  if (LEGACY_CURSOR_RE.test(value)) return { up: value, off: 0, anc: null };
   throw corruptCursor();
 }
 
@@ -104,7 +112,7 @@ function parsePayload(payload: string): { scope: string; state: CursorState } {
   const valid =
     typeof scope === 'string' &&
     scope.length <= MAX_SCOPE_LENGTH &&
-    (up === null || (typeof up === 'string' && UPSTREAM_CURSOR_RE.test(up))) &&
+    (up === null || isUpstreamCursor(up)) &&
     typeof off === 'number' &&
     Number.isInteger(off) &&
     off >= 0 &&

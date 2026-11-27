@@ -37,12 +37,18 @@ describe('echo', () => {
     expect(echo('a\n\tb')).toBe('a b');
     expect(echo('x'.repeat(100))).toHaveLength(80);
   });
+
+  it('drops invisible, bidi and C1 control characters', () => {
+    expect(echo('\u202Etsop\u202C ab\u200Bcd\u2066x\u2069 abc\u009B31m\u0085next')).toBe('tsop abcdx abc 31m next');
+  });
 });
 
 describe('parsePostRef', () => {
   it.each([
+    ['1', '1'],
     ['20', '20'],
     [' 20 ', '20'],
+    ['123456789012345678901234567890', '123456789012345678901234567890'],
     ['２１２６０４３４１３９８４４８９７６９', '2126043413984489769'],
     ['https://x.com/jack/status/20', '20'],
     ['x.com/jack/status/20?s=20&t=abc', '20'],
@@ -59,8 +65,7 @@ describe('parsePostRef', () => {
   });
 
   it.each([
-    ['1', `'1' is not a post ID or post URL.`],
-    ['123456789012345678901', `'123456789012345678901' is not a post ID or post URL.`],
+    ['1234567890123456789012345678901', `'1234567890123456789012345678901' is not a post ID or post URL.`],
     ['', `'' is not a post ID or post URL.`],
     ['javascript:alert(1)', `'javascript:alert(1)' is not a post ID or post URL.`],
     ['https://example.com/hello', `'https://example.com/hello' is not a post ID or post URL.`]
@@ -135,5 +140,11 @@ describe('parseHandleRef', () => {
       'Pass the @handle, e.g. {"handle":"nasa"}. For a post ID call get_post with {"id":"1234567890123456789"}.'
     );
     expect(errorOf(() => parseHandleRef('id:12')).hint).toBe('Pass the @handle, e.g. {"handle":"nasa"}.');
+    expect(errorOf(() => parseHandleRef('9'.repeat(40))).hint).toBe('Pass the @handle, e.g. {"handle":"nasa"}.');
+  });
+
+  it('keeps caller text out of JSON examples in hints', () => {
+    const hint = errorOf(() => parseHandleRef('x.com/i/status/1"x')).hint;
+    expect(hint).toBe('Call get_post with this link as id and read post.author.handle.');
   });
 });

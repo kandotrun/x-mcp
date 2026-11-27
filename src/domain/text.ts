@@ -22,10 +22,12 @@ export function cut(input: string, max: number): Cut {
 }
 
 const ECHO_MAX = 80;
+// eslint-disable-next-line no-control-regex
+const ANY_CONTROL_RE = /[\u0000-\u001F\u007F-\u009F]/g;
 
-/** Render caller input inside an error message: no control characters, collapsed whitespace, at most 80 characters. */
+/** Render caller input inside an error message: no invisible or control characters, collapsed whitespace, at most 80 characters. */
 export function echo(input: string): string {
-  const flat = input.replace(CONTROL_RE, ' ').replace(/\s+/g, ' ').trim();
+  const flat = input.replace(INVISIBLE_RE, '').replace(ANY_CONTROL_RE, ' ').replace(/\s+/g, ' ').trim();
   const codePoints = Array.from(flat);
   return codePoints.length <= ECHO_MAX ? flat : `${codePoints.slice(0, ECHO_MAX - 1).join('')}…`;
 }

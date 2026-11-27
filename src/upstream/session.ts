@@ -4,12 +4,24 @@
  */
 import { ToolError } from '../contract/errors';
 import { MAX_UPSTREAM_REQUESTS_PER_CALL } from '../contract/limits';
-import { internalError, upstreamTimeout, upstreamTooLarge, upstreamUnreachable } from '../contract/messages';
+import {
+  internalError,
+  requestBudgetExhausted,
+  upstreamTimeout,
+  upstreamTooLarge,
+  upstreamUnreachable
+} from '../contract/messages';
 import { classify, type ClassifyContext, type Outcome } from '../domain/classify';
 import { UpstreamError, type UpstreamClient } from './client';
-import type { Route } from './routes';
+import type { Route, RouteKind } from './routes';
 
 export type LogLine = Record<string, unknown>;
+
+/** An upstream request budget shared by every session of one HTTP request (see MAX_UPSTREAM_REQUESTS_PER_HTTP_REQUEST). */
+export type SharedBudget = { remaining: number };
+
+/** Upstream bodies on these routes can echo the caller's free-text query, so they are never logged. */
+const NO_SNIPPET_ROUTES = new Set<RouteKind>(['search', 'typeahead']);
 
 export type UpstreamSession = {
   fetch(route: Route, context: ClassifyContext): Promise<Outcome>;
@@ -17,10 +29,12 @@ export type UpstreamSession = {
 
 export function createSession(
   client: UpstreamClient,
-  options: { log: (line: LogLine) => void; maxRequests?: number; now?: () => number }
+  options: { log: (line: LogLine) => void; maxRequests?: number; shared?: SharedBudget; now?: () => number }
 ): UpstreamSession {
   const maxRequests = options.maxRequests ?? MAX_UPSTREAM_REQUESTS_PER_CALL;
   const now = options.now ?? (() => Date.now());
+  const shared = options.shared;
+  const sharedTotal = shared?.remaining ?? 0;
   let requests = 0;
 
   return {
@@ -29,7 +43,12 @@ export function createSession(
         options.log({ evt: 'upstream_request_cap', route: route.kind, cap: maxRequests });
         throw internalError();
       }
+      if (shared !== undefined && shared.remaining <= 0) {
+        options.log({ evt: 'upstream_request_budget', route: route.kind, budget: sharedTotal });
+        throw requestBudgetExhausted(sharedTotal);
+      }
       requests++;
+      if (shared !== undefined) shared.remaining--;
       const started = now();
       let response;
       try {
@@ -56,7 +75,7 @@ export function createSession(
             status: response.status,
             ms: now() - started,
             code: error.code,
-            snippet: response.snippet
+            ...(NO_SNIPPET_ROUTES.has(route.kind) ? {} : { snippet: response.snippet })
           });
         }
         throw error;

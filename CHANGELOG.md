@@ -7,7 +7,7 @@ All notable changes to this project are documented here. The format follows [Kee
 ### Changed
 
 - **Breaking:** tool results are now compact, agent-friendly JSON by default instead of the raw upstream payload wrapped in `{upstreamUrl, status, data}`. Single objects return `{post}` or `{user}`; lists return `{posts | users, returned, has_more, next_cursor?, truncated?, note?}`. Pass `response_format: "detailed"` for the full upstream objects (with rendered collage URLs removed).
-- **Breaking:** errors are `{error, code, retryable, hint, retry_after_seconds?, upstream_status?}` and no longer include upstream bodies or URLs.
+- **Breaking:** errors are `{error, code, retryable, hint, retry_after_seconds?, upstream_status?}` and no longer include upstream bodies or URLs. Argument validation errors and unknown tools use the same envelope (`code: "invalid_argument"`).
 - `count` is enforced by the server. Upstream pages ignore it (about 20 posts or 70 accounts per page), so 0.1 returned about 125,000 characters for `get_profile_statuses` with `count: 2`; 0.2 returns about 1,500. Every result stays under 30,000 characters.
 - `next_cursor` continues lossless pagination within and across upstream pages; 0.1 raw upstream cursors are still accepted.
 - `get_post` accepts post URLs (x.com, twitter.com, mobile, `/photo/1` and query suffixes); handles accept `@name` and profile or post URLs.
@@ -16,7 +16,9 @@ All notable changes to this project are documented here. The format follows [Kee
 - `get_openapi` is deprecated and returns a static endpoint summary.
 - Tool descriptions and server instructions explain when to use each tool, what it returns and how to paginate.
 - `GET` and `DELETE` on `/mcp` return 405 (the server is stateless); request bodies are limited to 64 KiB and tool arguments to 32 elements.
-- Upstream requests time out after 10 seconds including the body, read at most 2 MiB, do not follow redirects, and are capped at 3 per tool call.
+- Upstream requests time out after 10 seconds including the body, read at most 2 MiB, do not follow redirects, and are capped at 3 per tool call and 10 per HTTP request (JSON-RPC batches share the budget).
+- Protected accounts are reported as `restricted` and reposts of unknown posts as `not_found`, although the upstream answers both with HTTP 500. A profile lookup that answers "not found" is retried once, because the upstream occasionally says so for existing accounts; `not_found` is marked retryable for the same reason.
+- An account whose posts are all replies gets an empty `get_profile_statuses` result with a note suggesting `include_replies: true`, instead of an error.
 
 ### Added
 

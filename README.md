@@ -8,7 +8,7 @@
 
 [![CI](https://github.com/kandotrun/x-mcp/actions/workflows/ci.yml/badge.svg)](https://github.com/kandotrun/x-mcp/actions/workflows/ci.yml) [![MCP: Streamable HTTP](https://img.shields.io/badge/MCP-Streamable%20HTTP-167D9A?labelColor=111827)](#quick-start) [![Scope: read-only](https://img.shields.io/badge/scope-read--only-167D9A?labelColor=111827)](#scope-and-limits) [![Auth: none](https://img.shields.io/badge/auth-none-167D9A?labelColor=111827)](#quick-start) [![Cloudflare Workers](https://img.shields.io/badge/Cloudflare-Workers-F38020?logo=cloudflare&logoColor=white&labelColor=111827)](#how-it-works) [![License: MIT](https://img.shields.io/badge/license-MIT-167D9A?labelColor=111827)](LICENSE)
 
-**[Quick start](#quick-start)**&emsp;**[Features](#features)**&emsp;**[Tools](#tools)**&emsp;[Output](#output)&emsp;[Development](#development)&emsp;[日本語で読む](README.ja.md)
+**[Quick start](#quick-start)**&emsp;**[Features](#features)**&emsp;**[Tools](#tools)**&emsp;[Development](#development)&emsp;[日本語で読む](README.ja.md)
 
 </div>
 
@@ -28,9 +28,26 @@
 
 You need an AI agent or MCP client that supports **remote Streamable HTTP**. Using the hosted endpoint requires no Cloudflare account or repository clone.
 
-### 1. Connect your client
+### 1. Load the skill and connect
 
-Add the server as `x`:
+The bundled skill tells an agent when and how to use each tool. Paste this into an agent that can load skills and configure MCP servers:
+
+```text
+Install or load the x-mcp skill first:
+https://raw.githubusercontent.com/kandotrun/x-mcp/main/skills/x-mcp/SKILL.md
+
+Then configure an MCP server named `x` with Streamable HTTP:
+https://x.mcp.2-38.com/mcp
+
+Verify tools/list includes the tools documented in the skill.
+Call get_post with { "id": "https://x.com/jack/status/20" } and check that post.text is "just setting up my twttr".
+If a tool returns an upstream error such as feature_unavailable, report it separately from MCP setup.
+Use this MCP for public, read-only X/Twitter lookups.
+```
+
+Longer prompts in both languages are in [Agent install prompts](docs/agent-install-prompts.md).
+
+To add the server yourself, register it as `x`:
 
 | Client | Command |
 | --- | --- |
@@ -40,7 +57,7 @@ Add the server as `x`:
 | GitHub Copilot CLI | `copilot mcp add --transport http x https://x.mcp.2-38.com/mcp` |
 | Devin Desktop (formerly Windsurf) | `devin mcp add -s user x https://x.mcp.2-38.com/mcp` |
 | Cline | `cline mcp add x https://x.mcp.2-38.com/mcp --transport http --yes` |
-| Hermes Agent | `hermes mcp add x --url https://x.mcp.2-38.com/mcp` (answer `n` to the authentication question) |
+| Hermes Agent | `hermes mcp add x --url https://x.mcp.2-38.com/mcp` (interactive: answer `n` to the authentication question, then enable all tools) |
 
 For Claude Code, `--transport http` is required (the default is stdio). Other clients are configured as below. Tool names then appear as `mcp__x__get_post` (Claude Code), `mcp_x_get_post` (Hermes, Gemini CLI) and so on.
 
@@ -129,7 +146,7 @@ hermes mcp add x --url https://x.mcp.2-38.com/mcp
 hermes mcp test x
 ```
 
-`hermes mcp add` asks whether the server needs authentication; answer `n`. Or add this entry to `~/.hermes/config.yaml`:
+`hermes mcp add` is interactive: answer `n` when it asks whether the server needs authentication, then enable all tools. Agents and scripts should add this entry to `~/.hermes/config.yaml` instead:
 
 ```yaml
 mcp_servers:
@@ -168,26 +185,7 @@ Some clients use `servers` instead, or require an explicit transport/type field.
 
 </details>
 
-### 2. Load the skill
-
-The bundled skill tells an agent when and how to use each tool. Paste this into an agent that can load skills and configure MCP servers:
-
-```text
-Install or load the x-mcp skill first:
-https://raw.githubusercontent.com/kandotrun/x-mcp/main/skills/x-mcp/SKILL.md
-
-Then configure an MCP server named `x` with Streamable HTTP:
-https://x.mcp.2-38.com/mcp
-
-Verify tools/list includes the tools documented in the skill.
-Call get_post with { "id": "https://x.com/jack/status/20" } and check that post.text is "just setting up my twttr".
-If a tool returns an upstream error such as feature_unavailable, report it separately from MCP setup.
-Use this MCP for public, read-only X/Twitter lookups.
-```
-
-Longer prompts in both languages are in [Agent install prompts](docs/agent-install-prompts.md).
-
-### 3. Try a lookup
+### 2. Try a lookup
 
 Ask your connected agent:
 
@@ -229,7 +227,7 @@ Choose the narrowest tool for the question. These are **tool arguments**, not ra
 - `response_format: "detailed"` returns the full upstream objects (several times larger) instead of the concise fields.
 - Replies to a post and whole threads cannot be listed.
 
-## Output
+### Results and errors
 
 Single objects return `{post}` or `{user}`. Lists return:
 
@@ -270,13 +268,13 @@ The Worker exposes twelve read-only tools through the MCP TypeScript SDK. It cal
 - **Public and read-only.** No posting, liking, reposting, following, DMs, notifications, private accounts or authenticated timelines.
 - **Queries leave your client.** They are sent to this public Worker and `twitter.2-38.com`. Keep secrets, private data and access tokens out of tool arguments.
 - **Upstream-dependent data.** Availability, rate limits and response shape depend on `twitter.2-38.com`. A connected MCP server can still return upstream errors.
-- **Bounded requests.** Request bodies are limited to 64 KiB and tool arguments to 32 elements. Each tool call makes at most 3 upstream requests, each with a 10-second timeout.
-- **Stateless pagination.** If posts are deleted or added between calls, one item may repeat (the result's `note` says so). A garbage 0.1-style raw cursor makes the upstream restart from the newest page.
+- **Bounded requests.** Request bodies are limited to 64 KiB and tool arguments to 32 elements. Each tool call makes at most 3 upstream requests, each with a 10-second timeout, and one HTTP request (including a JSON-RPC batch) at most 10.
+- **Stateless pagination.** If posts are deleted or added between calls, some items may repeat (the result's `note` says so). A garbage 0.1-style raw cursor makes the upstream restart from the newest page.
 - **Client-dependent setup.** Configuration keys and skill installation differ by client. The URL and Streamable HTTP transport remain the same.
 
 ## Development
 
-For working on the Worker, you need **Node.js 24 or later**, **pnpm 12** (`corepack enable` picks the version from `package.json`) and, optionally, [just](https://github.com/casey/just). From a fresh clone:
+For working on the Worker, you need **Node.js 24 or later**, **pnpm 12** ([installation](https://pnpm.io/installation); Node 25 and later no longer bundle Corepack) and, optionally, [just](https://github.com/casey/just). From a fresh clone:
 
 ```sh
 git clone https://github.com/kandotrun/x-mcp.git

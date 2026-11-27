@@ -65,8 +65,8 @@ describe('resumeIndex', () => {
     expect(resumeIndex(items, 1, '4')).toEqual({ start: 2, shifted: false });
   });
 
-  it('skips a seam overlap on a fresh page', () => {
-    expect(resumeIndex(items, 0, '5')).toEqual({ start: 1, shifted: false });
+  it('starts a fresh page from the top (a repeated anchor is skipped as already seen, not as a seam)', () => {
+    expect(resumeIndex(items, 0, '5')).toEqual({ start: 0, shifted: false });
     expect(resumeIndex(items, 0, '1')).toEqual({ start: 0, shifted: false });
   });
 
@@ -130,6 +130,24 @@ describe('paginate', () => {
 
     const { seen } = await drain(timeline, 5);
     expect(seen).toEqual(timeline.items.map((item) => item.id));
+  });
+
+  it('does not skip unread items placed before a repeated anchor on the next page', async () => {
+    const pages: Record<string, Page> = {
+      start: { items: [{ id: '91' }, { id: '89' }], bottom: 'p2' },
+      p2: { items: [{ id: '88' }, { id: '89' }, { id: '87' }], bottom: 'p3' },
+      p3: { items: [], bottom: 'p4' }
+    };
+    const fetchPage = async (up: string | null) => pages[up ?? 'start']!;
+    const seen: string[] = [];
+    let state: CursorState = { up: null, off: 0, anc: null };
+    for (let call = 0; call < 10; call++) {
+      const result = await paginate({ state, count: 2, fetchPage, project });
+      seen.push(...result.items.map((item) => item.id));
+      if (!result.hasMore) break;
+      state = result.next!;
+    }
+    expect(seen).toEqual(['91', '89', '88', '87']);
   });
 
   it('never returns an item twice when the upstream repeats it on the same page', async () => {

@@ -2,7 +2,7 @@
 import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js';
 import { Hono } from 'hono';
 import { readConfig, type ConfigEnv } from './config';
-import { MAX_REQUEST_BODY_BYTES } from './contract/limits';
+import { MAX_REQUEST_BODY_BYTES, MAX_UPSTREAM_REQUESTS_PER_HTTP_REQUEST } from './contract/limits';
 import { TOOL_NAMES } from './contract/tools';
 import { corsHeaders, jsonResponse, textResponse, withCors } from './http';
 import { createServer, type ServerDeps } from './server';
@@ -66,7 +66,7 @@ export function createApp(deps: ServerDeps = {}): Hono<Bindings> {
       enableJsonResponse: true,
       maxRequestBodySize: MAX_REQUEST_BODY_BYTES
     });
-    const server = createServer(c.env, deps);
+    const server = createServer(c.env, { upstreamBudget: MAX_UPSTREAM_REQUESTS_PER_HTTP_REQUEST, ...deps });
     await server.connect(transport);
     return withCors(await transport.handleRequest(c.req.raw));
   });

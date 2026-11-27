@@ -4,17 +4,19 @@ import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { readConfig, type ConfigEnv } from './config';
 import { errorResult, ToolError } from './contract/errors';
 import { MAX_TOOL_INPUT_ELEMENTS } from './contract/limits';
-import { internalError } from './contract/messages';
+import { internalError, invalidArguments } from './contract/messages';
 import { describeTools, inputShapes, instructions, TOOL_ANNOTATIONS, TOOL_NAMES, type ToolArgs, type ToolName } from './contract/tools';
 import * as handlers from './tools/handlers';
 import type { ToolContext } from './tools/handlers';
 import { createUpstreamClient, type FetchLike } from './upstream/client';
-import { createSession, type LogLine } from './upstream/session';
+import { createSession, type LogLine, type SharedBudget } from './upstream/session';
 import { VERSION } from './version';
 
 export type ServerDeps = {
   fetch?: FetchLike;
   log?: (line: LogLine) => void;
+  /** Upstream requests shared by every tool call this server handles (one server serves one HTTP request). */
+  upstreamBudget?: number;
 };
 
 type Handler<N extends ToolName> = (args: ToolArgs<N>, context: ToolContext) => Promise<unknown>;
@@ -46,6 +48,12 @@ export function createServer(env: ConfigEnv | undefined, deps: ServerDeps = {}):
     { instructions: instructions(flags), maxToolInputElements: MAX_TOOL_INPUT_ELEMENTS }
   );
   const text = describeTools(flags);
+  const shared: SharedBudget | undefined = deps.upstreamBudget === undefined ? undefined : { remaining: deps.upstreamBudget };
+
+  // The SDK reports schema validation failures and unknown tools through its private createToolError(message), as
+  // plain text. Route them through the same JSON error envelope as every other failure. test/tools.test.ts pins this.
+  (server as unknown as { createToolError: (message: string) => CallToolResult }).createToolError = (message) =>
+    errorResult(invalidArguments(message));
 
   for (const name of TOOL_NAMES) {
     const handler = HANDLERS[name] as Handler<ToolName>;
@@ -53,7 +61,9 @@ export function createServer(env: ConfigEnv | undefined, deps: ServerDeps = {}):
       name,
       { title: text[name].title, description: text[name].description, inputSchema: inputShapes[name], annotations: TOOL_ANNOTATIONS },
       async (args: unknown) =>
-        run(name, log, () => handler(args as ToolArgs<ToolName>, { session: createSession(client, { log }), config }))
+        run(name, log, () =>
+          handler(args as ToolArgs<ToolName>, { session: createSession(client, { log, ...(shared ? { shared } : {}) }), config })
+        )
     );
   }
   return server;

@@ -15,7 +15,8 @@ import {
 } from '../contract/messages';
 import { cleanText } from './text';
 
-export const POST_ID_RE = /^\d{2,20}$/;
+/** The 0.1 range; the upstream validates the snowflake itself (it rejects "1" with a 400). */
+export const POST_ID_RE = /^\d{1,30}$/;
 export const HANDLE_RE = /^[A-Za-z0-9_]{1,30}$/;
 const X_HOST_RE = /^(?:[a-z0-9-]+\.)*(?:x|twitter)\.com$/;
 const SCHEME_RE = /^[a-z][a-z0-9+.-]*:/i;
@@ -83,7 +84,7 @@ export function parsePostRef(input: string): string {
 
 export function parseHandleRef(input: string): string {
   const value = cleanText(input).replace(/^@+/, '');
-  if (/^\d{16,}$/.test(value)) throw numericAccountId(input, value);
+  if (/^\d{16,}$/.test(value)) throw numericAccountId(input, POST_ID_RE.test(value) ? value : undefined);
   if (/^id:/i.test(value)) throw numericAccountId(input);
   if (HANDLE_RE.test(value)) return value;
 
@@ -94,7 +95,7 @@ export function parseHandleRef(input: string): string {
       if (!X_HOST_RE.test(host)) throw nonXHost(host);
       const segments = pathSegments(url) ?? [];
       if (lower(segments[0]) === 'i' && (isStatusKeyword(segments[1]) || lower(segments[1]) === 'web')) {
-        throw postLinkWithoutAccount(input);
+        throw postLinkWithoutAccount();
       }
       const handle = profileSegment(segments);
       if (handle !== undefined) return handle;

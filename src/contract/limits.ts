@@ -16,6 +16,8 @@ export const PREVIEW_MAX = 280;
 export const UPSTREAM_TIMEOUT_MS = 10_000;
 export const UPSTREAM_MAX_BYTES = 2 * 1024 * 1024;
 export const MAX_UPSTREAM_REQUESTS_PER_CALL = 3;
+/** Shared by every tool call of one HTTP request, so a JSON-RPC batch cannot multiply upstream load. */
+export const MAX_UPSTREAM_REQUESTS_PER_HTTP_REQUEST = 10;
 
 export const CURSOR_MAX_LEN = 1_024;
 export const CURSOR_MAX_OFFSET = 200;

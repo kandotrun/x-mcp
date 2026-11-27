@@ -109,6 +109,23 @@ describe('HTTP routes', () => {
     expect(result.content[0]!.text).toMatch(/maximum of 32 elements/);
   });
 
+  it('bounds upstream requests for a whole JSON-RPC batch, not only per tool call', async () => {
+    const fake = fakeUpstream(() => json(status));
+    const batchApp = createApp({ fetch: fake.fetch, log: () => {} });
+    const batch = Array.from({ length: 30 }, (_, i) => ({
+      jsonrpc: '2.0',
+      id: i,
+      method: 'tools/call',
+      params: { name: 'get_post', arguments: { id: '2000000000000000100' } }
+    }));
+    const response = await batchApp.request(mcpRequest(batch, { 'mcp-protocol-version': '2025-11-25' }), undefined, ENV);
+
+    expect(response.status).toBe(200);
+    expect(fake.urls.length).toBe(10);
+    const results = (await response.json()) as { result: { isError?: boolean; content: { text: string }[] } }[];
+    expect(results.filter((entry) => entry.result.isError === true)).toHaveLength(20);
+  });
+
   it('returns a JSON 404 that points at the MCP endpoint', async () => {
     const response = await app.request(`${ORIGIN}/nope`, {}, ENV);
     expect(response.status).toBe(404);

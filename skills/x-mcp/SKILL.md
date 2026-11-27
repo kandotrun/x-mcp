@@ -66,12 +66,7 @@ gemini mcp add --scope user --transport http x https://x.mcp.2-38.com/mcp
 
 ### Hermes Agent
 
-```bash
-hermes mcp add x --url https://x.mcp.2-38.com/mcp   # answer "n" to the authentication question
-hermes mcp test x
-```
-
-Or add this to `~/.hermes/config.yaml`, then start a new session or run `/reload-mcp`:
+Add this to `~/.hermes/config.yaml`, then run `/reload-mcp` (or start a new session) and `hermes mcp test x`:
 
 ```yaml
 mcp_servers:
@@ -79,11 +74,13 @@ mcp_servers:
     url: "https://x.mcp.2-38.com/mcp"
 ```
 
+`hermes mcp add x --url https://x.mcp.2-38.com/mcp` does the same for humans, but it is interactive (its authentication question defaults to yes), so agents should edit the file instead.
+
 Hermes tool names are prefixed with the server name, for example `mcp_x_get_post` and `mcp_x_get_profile_statuses`.
 
 ### Other clients
 
-Use the client's remote / HTTP / Streamable HTTP option with the same URL. Most JSON configs look like this; some clients use `servers`, `context_servers`, `serverUrl` or require `"type": "http"` (see the repository README for each client):
+Use the client's remote / HTTP / Streamable HTTP option with the same URL. Most JSON configs look like this; some clients use `servers`, `context_servers`, `serverUrl` or require `"type": "http"` (`"type": "streamableHttp"` for Cline; see the repository README for each client):
 
 ```json
 {
@@ -150,12 +147,12 @@ Errors are tool results with `isError: true`:
 
 | `code` | Meaning | What to do |
 |---|---|---|
-| `invalid_argument` | Bad id, handle or query | Fix the argument as the hint says |
+| `invalid_argument` | Bad id, handle, query or argument type | Fix the argument as the error and hint say |
 | `invalid_cursor` | Cursor changed, cut off or from another call | Pass `next_cursor` unchanged, or omit `cursor` |
-| `not_found` | Unknown account, deleted post | Check the handle or link |
+| `not_found` | Unknown account, deleted post | Check the handle or link; for an account you are sure exists, retry once (`retryable` is true because the upstream occasionally answers not found by mistake) |
 | `restricted` | Protected, suspended or withheld | Only public data can be read |
 | `feature_unavailable` | Upstream search is down | Use the alternative in the hint; do not retry |
-| `rate_limited` | Upstream rate limit | Wait `retry_after_seconds` |
+| `rate_limited` | Upstream rate limit, or too many calls in one request | Wait `retry_after_seconds` if present; send one tool call per request |
 | `timeout` / `upstream_unavailable` | Upstream trouble | Retry once only when `retryable` is true |
 | `internal` | Bug in x-mcp | Report it in the repository |
 

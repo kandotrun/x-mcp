@@ -169,7 +169,30 @@ describe('createSession', () => {
       code: 'feature_unavailable'
     });
     expect(lines).toHaveLength(1);
-    expect(lines[0]).toMatchObject({ evt: 'upstream_error', route: 'search', status: 503, code: 'feature_unavailable', snippet: '{"code":503}' });
+    expect(lines[0]).toMatchObject({ evt: 'upstream_error', route: 'search', status: 503, code: 'feature_unavailable' });
+    // Upstream bodies on query routes can echo the query, so they are never logged.
+    expect(lines[0]).not.toHaveProperty('snippet');
     expect(JSON.stringify(lines)).not.toMatch(/secret query|CURSOR/);
+  });
+
+  it('logs a short snippet for failures on routes without free-text input', async () => {
+    const lines: Record<string, unknown>[] = [];
+    const client: UpstreamClient = { get: async () => ({ ...response(400, { code: 400, allowedPrefix: '/x' }), snippet: '{"code":400}' }) };
+    await expect(createSession(client, { log: (line) => lines.push(line) }).fetch(routes.status('20'), { postId: '20' })).rejects.toMatchObject({
+      code: 'internal'
+    });
+    expect(lines[0]).toMatchObject({ route: 'status', snippet: '{"code":400}' });
+  });
+
+  it('shares an optional upstream budget across every tool call of one HTTP request', async () => {
+    const client: UpstreamClient = { get: vi.fn(async () => ok) };
+    const shared = { remaining: 4 };
+    const first = createSession(client, { log: () => {}, shared });
+    const second = createSession(client, { log: () => {}, shared });
+
+    for (let i = 0; i < 3; i++) await first.fetch(routes.status('20'), {});
+    await second.fetch(routes.status('20'), {});
+    await expect(second.fetch(routes.status('20'), {})).rejects.toMatchObject({ code: 'rate_limited', retryable: true });
+    expect(client.get).toHaveBeenCalledTimes(4);
   });
 });

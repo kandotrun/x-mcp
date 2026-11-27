@@ -41,7 +41,7 @@ export async function call(client: Client, name: string, args?: Record<string, u
   try {
     data = JSON.parse(text) as Record<string, unknown>;
   } catch {
-    // SDK validation errors are plain text
+    // leave data empty; tests assert on it
   }
   return { isError: result.isError === true, text, data };
 }

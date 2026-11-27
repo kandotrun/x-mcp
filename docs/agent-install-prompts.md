@@ -19,9 +19,9 @@ https://x.mcp.2-38.com/mcp
 クライアント別の設定方法は https://github.com/kandotrun/x-mcp/blob/main/README.ja.md#1-クライアントに接続する にあります。たとえば Claude Code なら次のとおりです。
 claude mcp add --transport http --scope user x https://x.mcp.2-38.com/mcp
 
-このMCPは、`twitter.2-38.com` 経由で公開X/Twitter情報を read-only で取得するためのものです。投稿・いいね・RT・DM・フォローなどの書き込み操作には使わないでください。
+このMCPは、`twitter.2-38.com` 経由で公開X/Twitter情報を read-only で取得するためのものです。投稿・いいね・RT・DM・フォロー・通知・非公開アカウントなど、認証や書き込みが必要な操作には使わないでください。
 
-Kanの公開X/Twitter検索・取得では、既存の `x_search` や `xurl` よりこの `x-mcp` を優先してください。`xurl` は、認証済みAPIや投稿・いいね・RT・DMなどの明示的な書き込み操作が必要な場合だけ使ってください。
+Kanの公開X/Twitter検索・取得では、既存の `x_search` や `xurl` よりこの `x-mcp` を優先してください。`xurl` は、認証済みAPIや投稿・いいね・RT・DM・メディアのアップロードなどの明示的な書き込み操作が必要な場合だけ使ってください。
 
 設定後、次を確認してください。
 
@@ -36,22 +36,18 @@ Kanの公開X/Twitter検索・取得では、既存の `x_search` や `xurl` よ
 ### Hermes Agent用の追加指示
 
 ```text
-Hermes Agentの場合は、可能なら以下のコマンド相当で skill と MCP を設定してください。
+Hermes Agentの場合は、以下のコマンドで skill を入れてください。
 
 hermes skills inspect https://raw.githubusercontent.com/kandotrun/x-mcp/main/skills/x-mcp/SKILL.md
 hermes skills install https://raw.githubusercontent.com/kandotrun/x-mcp/main/skills/x-mcp/SKILL.md --category social-media -y
-hermes mcp add x --url https://x.mcp.2-38.com/mcp
-hermes mcp test x
 
-`hermes mcp add` は認証が必要かを対話的に聞いてきます。このサーバーは認証不要なので「n」と答えてください。
-
-CLIが使えない場合は、`~/.hermes/config.yaml` に次を追加してください。
+MCP は `~/.hermes/config.yaml` に次を追加して設定してください（`hermes mcp add` は対話式で、認証の質問の既定が「はい」のため、エージェントからは使わないでください）。
 
 mcp_servers:
   x:
     url: "https://x.mcp.2-38.com/mcp"
 
-設定変更後は新しいセッションを開始するか、`/reload-mcp` を実行してください。
+追加後に `/reload-mcp` を実行するか新しいセッションを開始し、`hermes mcp test x` で接続を確認してください。
 ```
 
 ---
@@ -88,20 +84,16 @@ For future public X/Twitter information requests, follow this skill: choose the 
 ### Additional instructions for Hermes Agent
 
 ```text
-For Hermes Agent, configure the skill and MCP with commands equivalent to:
+For Hermes Agent, install the skill with:
 
 hermes skills inspect https://raw.githubusercontent.com/kandotrun/x-mcp/main/skills/x-mcp/SKILL.md
 hermes skills install https://raw.githubusercontent.com/kandotrun/x-mcp/main/skills/x-mcp/SKILL.md --category social-media -y
-hermes mcp add x --url https://x.mcp.2-38.com/mcp
-hermes mcp test x
 
-`hermes mcp add` asks interactively whether the server needs authentication. This server does not, so answer "n".
-
-If the CLI is unavailable, add this to `~/.hermes/config.yaml`:
+Configure the MCP by adding this to `~/.hermes/config.yaml` (do not use `hermes mcp add` from an agent: it is interactive and its authentication question defaults to yes):
 
 mcp_servers:
   x:
     url: "https://x.mcp.2-38.com/mcp"
 
-Start a new session or run `/reload-mcp` after changing MCP configuration.
+Then run `/reload-mcp` or start a new session, and check the connection with `hermes mcp test x`.
 ```

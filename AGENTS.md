@@ -44,3 +44,8 @@ just smoke-remote
 ```
 
 `just smoke-remote` verifies MCP `tools/list`, `get_post` (jack/20), pagination and the `search_posts` fallback, and warns when `SEARCH_ENABLED` no longer matches the live upstream search state.
+
+## Known CI behavior
+
+- pnpm 12 checks locked versions against its built-in one-day `minimumReleaseAge`, even with `--frozen-lockfile`. A Dependabot security PR that locks a release published less than 24 hours ago fails `pnpm install` with `ERR_PNPM_MINIMUM_RELEASE_AGE_VIOLATION`; re-run CI after a day instead of weakening the policy.
+- Keep `pmOnFail: ignore` in `pnpm-workspace.yaml`: it keeps `pnpm-lock.yaml` a single YAML document, which GitHub's dependency graph (and so Dependabot) needs. CI fails if the lockfile has more than one document.

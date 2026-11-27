@@ -8,7 +8,7 @@
 
 [![CI](https://github.com/kandotrun/x-mcp/actions/workflows/ci.yml/badge.svg)](https://github.com/kandotrun/x-mcp/actions/workflows/ci.yml) [![MCP: Streamable HTTP](https://img.shields.io/badge/MCP-Streamable%20HTTP-167D9A?labelColor=111827)](#はじめる) [![読み取り専用](https://img.shields.io/badge/scope-read--only-167D9A?labelColor=111827)](#利用範囲と制限) [![認証不要](https://img.shields.io/badge/auth-none-167D9A?labelColor=111827)](#はじめる) [![Cloudflare Workers](https://img.shields.io/badge/Cloudflare-Workers-F38020?logo=cloudflare&logoColor=white&labelColor=111827)](#仕組み) [![ライセンス: MIT](https://img.shields.io/badge/license-MIT-167D9A?labelColor=111827)](LICENSE)
 
-**[はじめる](#はじめる)**&emsp;**[できること](#できること)**&emsp;**[ツール一覧](#ツール一覧)**&emsp;[出力](#出力)&emsp;[開発](#開発)&emsp;[Read in English](README.md)
+**[はじめる](#はじめる)**&emsp;**[できること](#できること)**&emsp;**[ツール一覧](#ツール一覧)**&emsp;[開発](#開発)&emsp;[Read in English](README.md)
 
 </div>
 
@@ -28,9 +28,26 @@
 
 **リモートのStreamable HTTPに対応したAIエージェント、またはMCPクライアント**を用意してください。公開エンドポイントを使うだけなら、Cloudflareアカウントもリポジトリのcloneも不要です。
 
-### 1. クライアントに接続する
+### 1. スキルを読み込んで接続する
 
-サーバー名を `x` として追加します。
+同梱のスキルは、各ツールをいつ・どう使うかをエージェントに伝えます。スキルの読み込みとMCP設定ができるエージェントに、次を貼り付けてください。
+
+```text
+まず以下のx-mcpスキルをインストール、または読み込んでください。
+https://raw.githubusercontent.com/kandotrun/x-mcp/main/skills/x-mcp/SKILL.md
+
+その後、MCPサーバー名を `x`、接続方式をStreamable HTTPとして設定してください。
+https://x.mcp.2-38.com/mcp
+
+tools/listに、スキルに記載されたツールがあることを確認してください。
+get_postを { "id": "https://x.com/jack/status/20" } で呼び、post.textが "just setting up my twttr" になることを確認してください。
+feature_unavailableなどの上流エラーが返った場合は、MCPの設定結果とは分けて報告してください。
+このMCPは、公開X/Twitter情報の読み取り専用の取得に使ってください。
+```
+
+詳しい日英のプロンプトは[AIエージェント導入プロンプト](docs/agent-install-prompts.md)にあります。
+
+自分でサーバーを追加する場合は、名前を `x` として登録します。
 
 | クライアント | コマンド |
 | --- | --- |
@@ -40,9 +57,9 @@
 | GitHub Copilot CLI | `copilot mcp add --transport http x https://x.mcp.2-38.com/mcp` |
 | Devin Desktop（旧 Windsurf） | `devin mcp add -s user x https://x.mcp.2-38.com/mcp` |
 | Cline | `cline mcp add x https://x.mcp.2-38.com/mcp --transport http --yes` |
-| Hermes Agent | `hermes mcp add x --url https://x.mcp.2-38.com/mcp`（認証の質問には `n` と答える） |
+| Hermes Agent | `hermes mcp add x --url https://x.mcp.2-38.com/mcp`（対話式。認証の質問には `n` と答え、すべてのツールを有効にする） |
 
-Claude Codeでは `--transport http` が必須です（既定はstdio）。そのほかのクライアントは下の設定を使ってください。ツール名は `mcp__x__get_post`（Claude Code）や `mcp_x_get_post`（Hermes、Gemini CLI）のように見えます。
+Claude Codeでは `--transport http` が必須です（既定はstdio）。そのほかのクライアントは下の設定を使ってください。ツール名は `mcp__x__get_post`（Claude Code）や `mcp_x_get_post`（Hermes、Gemini CLI）のような名前になります。
 
 <details>
 <summary><b>claude.ai と Claude Desktop</b></summary>
@@ -113,7 +130,7 @@ Antigravity（CLI・IDE）は `~/.gemini/config/mcp_config.json` を読み、`se
 <details>
 <summary><b>Devin Desktop / Windsurf、Cline、Zed</b></summary>
 
-- **Devin Desktop**（旧 Windsurf）: `devin mcp add -s user x https://x.mcp.2-38.com/mcp`。旧 Windsurf の Cascade エージェントは `~/.codeium/windsurf/mcp_config.json` に `{"mcpServers": {"x": {"serverUrl": "https://x.mcp.2-38.com/mcp"}}}` を書きます。
+- **Devin Desktop**（旧 Windsurf）: `devin mcp add -s user x https://x.mcp.2-38.com/mcp`。旧 Windsurf の Cascade エージェントは `~/.codeium/windsurf/mcp_config.json` を読み込みます（設定例: `{"mcpServers": {"x": {"serverUrl": "https://x.mcp.2-38.com/mcp"}}}`）。
 - **Cline**: `cline mcp add x https://x.mcp.2-38.com/mcp --transport http --yes`。Clineのパネルからは MCP Servers → Remote Servers で、transportにStreamable HTTPを選びます。`cline_mcp_settings.json` を手で編集する場合は `"type": "streamableHttp"` を指定してください。省略すると旧来のSSEになり、このサーバーには接続できません。
 - **Zed**: `~/.config/zed/settings.json` に `{"context_servers": {"x": {"url": "https://x.mcp.2-38.com/mcp"}}}` を追加します。
 
@@ -129,7 +146,7 @@ hermes mcp add x --url https://x.mcp.2-38.com/mcp
 hermes mcp test x
 ```
 
-`hermes mcp add` は認証が必要かを聞いてくるので、`n` と答えてください。または、`~/.hermes/config.yaml` に次を追加します。
+`hermes mcp add` は対話式です。認証が必要かを聞かれたら `n` と答え、すべてのツールを有効にしてください。エージェントやスクリプトから設定する場合は、代わりに `~/.hermes/config.yaml` に次を追加します。
 
 ```yaml
 mcp_servers:
@@ -168,26 +185,7 @@ mcp_servers:
 
 </details>
 
-### 2. スキルを読み込む
-
-同梱のスキルは、各ツールをいつ・どう使うかをエージェントに伝えます。スキルの読み込みとMCP設定ができるエージェントに、次を貼り付けてください。
-
-```text
-まず以下のx-mcpスキルをインストール、または読み込んでください。
-https://raw.githubusercontent.com/kandotrun/x-mcp/main/skills/x-mcp/SKILL.md
-
-その後、MCPサーバー名を `x`、接続方式をStreamable HTTPとして設定してください。
-https://x.mcp.2-38.com/mcp
-
-tools/listに、スキルに記載されたツールがあることを確認してください。
-get_postを { "id": "https://x.com/jack/status/20" } で呼び、post.textが "just setting up my twttr" になることを確認してください。
-feature_unavailableなどの上流エラーが返った場合は、MCPの設定結果とは分けて報告してください。
-このMCPは、公開X/Twitter情報の読み取り専用の取得に使ってください。
-```
-
-詳しい日英のプロンプトは[AIエージェント導入プロンプト](docs/agent-install-prompts.md)にあります。
-
-### 3. 調べてみる
+### 2. 調べてみる
 
 接続したエージェントに、次のように依頼します。
 
@@ -226,10 +224,10 @@ feature_unavailableなどの上流エラーが返った場合は、MCPの設定�
 
 - `id` には投稿のURL（`x.com`、`twitter.com`、モバイル、`/photo/1` や `?s=20` 付き）か、文字列の数値IDを渡せます。`handle` は `jack`、`@jack`、`https://x.com/jack` のどれでも構いません。
 - `count` は **1〜100件**で、既定は **10件**です。件数はサーバー側で守ります。`get_profile_statuses` は `include_replies: true` で返信も含めます。
-- `response_format: "detailed"` にすると、要点だけでなく上流のオブジェクトをそのまま返します（数倍大きくなります）。
+- `response_format: "detailed"` にすると、要点の代わりに上流のオブジェクトをそのまま返します（数倍大きくなります）。
 - 投稿への返信一覧やスレッド全体は取得できません。
 
-## 出力
+### 結果とエラー
 
 1件の取得は `{post}` か `{user}` を返します。一覧は次の形です。
 
@@ -270,13 +268,13 @@ WorkerはMCP TypeScript SDKを使って、12個の読み取り専用ツールを
 - **公開情報の読み取り専用。** 投稿・いいね・リポスト・フォロー・DM・通知・非公開アカウント・認証済みタイムラインには対応しません。
 - **クエリは外部に送信されます。** 公開Workerと `twitter.2-38.com` に送られるため、秘密情報・非公開データ・アクセストークンを引数に入れないでください。
 - **データ取得は上流に依存します。** 可用性・レート制限・応答形式は `twitter.2-38.com` 次第です。MCPに接続できていても、上流エラーが返ることがあります。
-- **リクエストには上限があります。** リクエスト本文は64 KiB、ツール引数は32要素までです。1回のツール呼び出しで上流へ送るリクエストは最大3回で、それぞれ10秒でタイムアウトします。
-- **ページ送りはstatelessです。** 呼び出しの間に投稿が削除・追加されると、1件重複することがあります（その場合は `note` に出ます）。0.1形式の壊れた生のcursorを渡すと、上流は最新ページから返し直します。
+- **リクエストには上限があります。** リクエスト本文は64 KiB、ツール引数は32要素までです。1回のツール呼び出しで上流へ送るリクエストは最大3回で、それぞれ10秒でタイムアウトします。1つのHTTPリクエスト（JSON-RPCのバッチを含む）全体では最大10回です。
+- **ページ送りはstatelessです。** 呼び出しの間に投稿が削除・追加されると、一部が重複することがあります（その場合は `note` に出ます）。0.1形式の壊れた生のcursorを渡すと、上流は最新ページから返し直します。
 - **導入方法はクライアントによって異なります。** 設定キーやスキルの導入方法は変わりますが、URLとStreamable HTTPという接続方式は共通です。
 
 ## 開発
 
-Workerを開発する場合は、**Node.js 24以上**、**pnpm 12**（`corepack enable` で `package.json` のバージョンが使われます）、任意で [just](https://github.com/casey/just) を用意してください。新しくcloneする場合の手順です。
+Workerを開発する場合は、**Node.js 24以上**、**pnpm 12**（[インストール方法](https://pnpm.io/ja/installation)。Node 25以降にはCorepackが同梱されていません）、任意で [just](https://github.com/casey/just) を用意してください。新しくcloneする場合の手順です。
 
 ```sh
 git clone https://github.com/kandotrun/x-mcp.git

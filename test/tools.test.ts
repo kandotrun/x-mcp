@@ -92,11 +92,20 @@ describe('get_post', () => {
     expect((await call(client, 'get_post', { id: '77' })).data).toMatchObject({ code: 'restricted' });
   });
 
-  it('reports schema errors as tool errors the model can fix', async () => {
-    const result = await call(await connect(upstream().fetch), 'get_post', { id: 20 });
+  it('reports schema errors in the same JSON error envelope', async () => {
+    const client = await connect(upstream().fetch);
 
-    expect(result.isError).toBe(true);
-    expect(result.text).toContain('id must be a string');
+    const wrongType = await call(client, 'get_post', { id: 20 });
+    expect(wrongType.isError).toBe(true);
+    expect(ErrorPayloadSchema.parse(wrongType.data)).toMatchObject({ code: 'invalid_argument', retryable: false });
+    expect(wrongType.data.error).toContain('id must be a string');
+    expect(wrongType.data.error).not.toMatch(/^MCP error/);
+
+    const outOfRange = await call(client, 'get_profile_statuses', { handle: 'jack', count: 200 });
+    expect(ErrorPayloadSchema.parse(outOfRange.data).error).toContain('count must be a whole number from 1 to 100');
+
+    const unknown = await call(client, 'no_such_tool', {});
+    expect(ErrorPayloadSchema.parse(unknown.data)).toMatchObject({ code: 'invalid_argument', hint: 'Use one of the tool names from tools/list.' });
   });
 });
 
@@ -114,6 +123,20 @@ describe('get_profile', () => {
     expect(plain.data.user).not.toHaveProperty('about');
     expect(UserResultSchema.parse(withAbout.data).user.about).toMatchObject({ based_in: 'Japan', username_changes: 1 });
     expect(fake.paths()).toEqual(['/2/profile/example_dev', '/2/profile/example_dev?about_account=1']);
+  });
+
+  it('retries a profile 404 once, because the upstream sometimes answers not found for existing accounts', async () => {
+    let calls = 0;
+    const flaky = fakeUpstream(() => (calls++ === 0 ? json(userNotFound, 404) : json(profile)));
+    const result = await call(await connect(flaky.fetch), 'get_profile', { handle: 'example_dev' });
+
+    expect(result.data).toMatchObject({ user: { handle: 'example_dev' } });
+    expect(flaky.urls).toHaveLength(2);
+
+    const missing = fakeUpstream(() => json(userNotFound, 404));
+    const notFound = await call(await connect(missing.fetch), 'get_profile', { handle: 'nobody' });
+    expect(notFound.data).toMatchObject({ code: 'not_found', retryable: true });
+    expect(missing.urls).toHaveLength(2);
   });
 
   it('notes protected accounts and maps unknown and suspended ones', async () => {
@@ -206,8 +229,70 @@ describe('get_profile_statuses', () => {
     expect(recovered.data).toMatchObject({ returned: 3 });
     expect(flaky.urls).toHaveLength(3);
 
-    const broken = await call(await connect(respond({ statuses: 5 }, empty).fetch), 'get_profile_statuses', { handle: 'broken' });
+    const broken = await call(await connect(respond({ statuses: 5 }, empty).fetch), 'get_profile_statuses', {
+      handle: 'broken',
+      include_replies: true
+    });
     expect(broken.data).toMatchObject({ code: 'upstream_unavailable', retryable: true });
+  });
+
+  it('treats an empty default timeline of an account with only replies as a success with a hint', async () => {
+    const fake = fakeUpstream((url) =>
+      url.pathname.endsWith('/statuses')
+        ? json({ code: 200, results: [], cursor: { bottom: 'X' } })
+        : json({ ...profile, user: { ...profile.user, statuses: 7 } })
+    );
+    const result = await call(await connect(fake.fetch), 'get_profile_statuses', { handle: 'replier' });
+
+    expect(result.data).toEqual({
+      posts: [],
+      returned: 0,
+      has_more: false,
+      note: '@replier has no posts other than replies; pass include_replies=true to see them.'
+    });
+    expect(fake.urls).toHaveLength(3);
+  });
+
+  it('reports protected accounts as restricted when the upstream answers the timeline with HTTP 500', async () => {
+    const serverError = () => json({ code: 500, results: [], cursor: { top: null, bottom: null } }, 500);
+    for (const tool of ['get_profile_statuses', 'get_profile_media', 'get_profile_articles', 'get_profile_followers', 'get_profile_following']) {
+      const fake = fakeUpstream((url) =>
+        /\/(statuses|media|articles|followers|following)$/.test(url.pathname)
+          ? serverError()
+          : json({ ...profile, user: { ...profile.user, screen_name: 'locked', protected: true } })
+      );
+      const result = await call(await connect(fake.fetch), tool, { handle: 'locked' });
+      expect(result.data, tool).toMatchObject({ code: 'restricted', retryable: false });
+      expect(fake.urls, tool).toHaveLength(2);
+    }
+
+    let profileCalls = 0;
+    const flakyProfile = fakeUpstream((url) => {
+      if (url.pathname.endsWith('/statuses')) return serverError();
+      return profileCalls++ === 0 ? json(userNotFound, 404) : json({ ...profile, user: { ...profile.user, protected: true } });
+    });
+    expect((await call(await connect(flakyProfile.fetch), 'get_profile_statuses', { handle: 'locked' })).data).toMatchObject({
+      code: 'restricted'
+    });
+    expect(flakyProfile.urls).toHaveLength(3);
+
+    const publicAccount = fakeUpstream((url) => (url.pathname.endsWith('/statuses') ? serverError() : json(profile)));
+    expect((await call(await connect(publicAccount.fetch), 'get_profile_statuses', { handle: 'example_dev' })).data).toMatchObject({
+      code: 'upstream_unavailable',
+      retryable: true,
+      upstream_status: 500
+    });
+  });
+
+  it('notes a concise fallback in detailed mode only when such an item is returned', async () => {
+    const page = timelinePage({ size: 2 });
+    (page.results[1] as Record<string, unknown>).text = 'y'.repeat(30_000);
+    const client = await connect(fakeUpstream(() => json(page)).fetch);
+
+    const both = await call(client, 'get_profile_statuses', { handle: 'jack', count: 2, response_format: 'detailed' });
+    expect(both.data.note).toBe('Posts over 29,000 characters in detailed form are returned in concise form.');
+    const first = await call(client, 'get_profile_statuses', { handle: 'jack', count: 1, response_format: 'detailed' });
+    expect(first.data.note).toBeUndefined();
   });
 
   it('keeps detailed pages under the result budget', async () => {
@@ -246,6 +331,18 @@ describe('other list tools', () => {
     expect(following.users.map((user) => user.handle)).toEqual(['sample_news', 'test_reposter', 'third_user']);
     expect(reposts.returned).toBe(3);
     expect(fake.paths()).toContain('/2/status/20/reposts');
+  });
+
+  it('maps reposts of an unknown post to not_found even though the upstream answers HTTP 500', async () => {
+    const fake = fakeUpstream((url) =>
+      url.pathname.endsWith('/reposts')
+        ? json({ code: 500, results: [], cursor: { top: null, bottom: null } }, 500)
+        : json({ status: null, thread: null, author: null, code: 404 }, 404)
+    );
+    const result = await call(await connect(fake.fetch), 'get_post_reposts', { id: '2126276112015639014' });
+
+    expect(result.data).toMatchObject({ code: 'not_found', retryable: false });
+    expect(fake.paths()).toEqual(['/2/status/2126276112015639014/reposts', '/2/status/2126276112015639014']);
   });
 
   it('reports an empty reposts list as a success with a note', async () => {

@@ -44,12 +44,9 @@ function anchorId(item: unknown): string | undefined {
 /** Where to resume on a (possibly changed) page, given the previous offset and anchor id. */
 export function resumeIndex(items: readonly unknown[], off: number, anc: string | null): { start: number; shifted: boolean } {
   const n = items.length;
-  if (anc === null) return { start: Math.min(off, n), shifted: false };
-  if (off === 0) {
-    // A fresh page reached through the bottom cursor: only skip a seam overlap.
-    for (let i = 0; i < Math.min(3, n); i++) if (anchorId(items[i]) === anc) return { start: i + 1, shifted: false };
-    return { start: 0, shifted: false };
-  }
+  // A fresh page reached through the bottom cursor starts at the top. paginate() treats the anchor as already seen,
+  // so a repeated anchor (a seam overlap or a duplicate entry) is skipped without skipping anything before it.
+  if (anc === null || off === 0) return { start: Math.min(off, n), shifted: false };
   if (anchorId(items[off - 1]) === anc) return { start: off, shifted: false };
   let best = -1;
   for (let i = 0; i < n; i++) {
@@ -79,7 +76,7 @@ export async function paginate<T>(options: PaginateOptions<T>): Promise<Paginate
     }
 
     const { start, shifted } = resumeIndex(items, off, anc);
-    const seen = new Set<string>();
+    const seen = new Set<string>(anc === null ? [] : [anc]);
     for (const item of items.slice(0, start)) {
       const id = anchorId(item);
       if (id !== undefined) seen.add(id);
