@@ -40,7 +40,7 @@ Keyword search (`search_posts`, `typeahead`) is **currently unavailable upstream
 
 ## Kan preference
 
-For Kan's normal public X/Twitter search and retrieval requests, prefer this MCP over built-in `x_search` or the `xurl` CLI. Reserve `xurl` for explicit authenticated or write-capable X API operations that this read-only MCP cannot perform.
+For Kan's normal public X/Twitter retrieval requests (posts, profiles, timelines, followers, trends), prefer this MCP over built-in `x_search` or the `xurl` CLI. While `search_posts` returns `feature_unavailable`, use `x_search` or another search tool for keyword and hashtag searches. Reserve `xurl` for explicit authenticated or write-capable X API operations that this read-only MCP cannot perform.
 
 ## Install / configure the MCP
 
@@ -100,7 +100,7 @@ Use the client's remote / HTTP / Streamable HTTP option with the same URL. Most 
 | An account | `get_profile` | `{"handle":"@nasa"}`, `{"handle":"nasa","include_about":true}` |
 | What an account posted (or a `from:user` request) | `get_profile_statuses` | `{"handle":"nasa","count":5}`, add `"include_replies":true` for replies |
 | An account's photos or videos | `get_profile_media` | `{"handle":"nasa","count":5}` |
-| An account's long-form X Articles | `get_profile_articles` | `{"handle":"jack"}`, then `get_post` with a result's `url` for the full text |
+| An account's long-form X Articles | `get_profile_articles` | `{"handle":"jack"}`, then `get_post` with a result's `url` for the Article text (up to 20,000 characters) |
 | Who follows an account / whom it follows | `get_profile_followers` / `get_profile_following` | `{"handle":"jack","count":20}` |
 | Who reposted a post | `get_post_reposts` | `{"id":"https://x.com/jack/status/20"}` |
 | Trending topics | `get_trends` | `{"count":10}` |
@@ -134,7 +134,7 @@ Lists:
 
 - `posts` or `users`, plus `returned`, `has_more`, and `next_cursor` (present only when `has_more` is true).
 - At most `count` items per call (1-100, default 10). Fewer can come back at an upstream page boundary.
-- To continue, pass `next_cursor` back unchanged as `cursor`, with the same tool and arguments. While the cursor is still on the newest upstream page, a later call can include posts added at its top since the first call; use `created_at` to order them.
+- To continue, pass `next_cursor` back unchanged as `cursor`, with the same tool and arguments. Posts added after the first call are normally skipped (omit `cursor` to start again from the newest), and a post that the upstream lists on two pages can come back twice, so de-duplicate by `id`.
 - `note` explains short or empty results, e.g. `"@quiet has no posts."`.
 
 `response_format: "detailed"` returns the full upstream objects (several times larger). Use it only when you need a field that the concise form omits.
@@ -153,7 +153,7 @@ Errors are tool results with `isError: true`:
 | `restricted` | Protected, suspended or withheld | Only public data can be read |
 | `feature_unavailable` | Upstream search is down | Use the alternative in the hint; do not retry |
 | `rate_limited` | Upstream rate limit, or too many calls in one request | Wait `retry_after_seconds` if present; send one tool call per request |
-| `timeout` / `upstream_unavailable` | Upstream trouble | Retry once only when `retryable` is true |
+| `timeout` / `upstream_unavailable` | Upstream trouble | Retry once only when `retryable` is true; for a list page, call again with the same `cursor` |
 | `internal` | Bug in x-mcp | Report it in the repository |
 
 ## Verification checklist

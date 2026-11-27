@@ -14,7 +14,7 @@ This repo contains `x-mcp`, a public read-only Streamable HTTP MCP server for X/
 - Never name the upstream project in public copy or tool output (`test/docs.test.ts` and `test/contract.test.ts` enforce this).
 - Tool names, their order and v0.1 parameters are a public contract: only add tools and loosen constraints. `test/contract.test.ts` guards this against `test/fixtures/tools-list-0.1.json`; update the committed `test/__snapshots__/tools-list.*.json` deliberately with `pnpm vitest run -u` when the contract changes.
 - Keep test fixtures synthetic (fictional handles and texts), as generated for `test/fixtures/`.
-- When the version changes, update `src/version.ts`, `package.json`, the `SKILL.md` frontmatter and `CHANGELOG.md` together (a test checks the first three).
+- When the version changes, update `src/version.ts`, `package.json`, the `SKILL.md` frontmatter and `CHANGELOG.md` together (`test/docs.test.ts` checks `package.json`, `SKILL.md` and `CHANGELOG.md` against `src/version.ts`).
 
 ## Layout
 

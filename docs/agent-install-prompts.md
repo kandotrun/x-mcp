@@ -21,7 +21,7 @@ claude mcp add --transport http --scope user x https://x.mcp.2-38.com/mcp
 
 このMCPは、`twitter.2-38.com` 経由で公開X/Twitter情報を read-only で取得するためのものです。投稿・いいね・RT・DM・フォロー・通知・非公開アカウントなど、認証や書き込みが必要な操作には使わないでください。
 
-Kanの公開X/Twitter検索・取得では、既存の `x_search` や `xurl` よりこの `x-mcp` を優先してください。`xurl` は、認証済みAPIや投稿・いいね・RT・DM・メディアのアップロードなどの明示的な書き込み操作が必要な場合だけ使ってください。
+Kanの公開X/Twitter情報の取得（投稿・プロフィール・タイムライン・フォロワー・トレンド）では、既存の `x_search` や `xurl` よりこの `x-mcp` を優先してください。`search_posts` が `feature_unavailable` を返す間は、キーワードやハッシュタグの検索に `x_search` などの検索ツールを使ってください。`xurl` は、認証済みAPIや投稿・いいね・RT・DM・メディアのアップロードなどの明示的な書き込み操作が必要な場合だけ使ってください。
 
 設定後、次を確認してください。
 
@@ -69,7 +69,7 @@ claude mcp add --transport http --scope user x https://x.mcp.2-38.com/mcp
 
 This MCP provides read-only public X/Twitter retrieval via `twitter.2-38.com`. Do not use it for posting, liking, reposting, DMs, following, notifications, private accounts, or any authenticated write action.
 
-For Kan's public X/Twitter search and retrieval, prefer this `x-mcp` over existing `x_search` or `xurl`. Reserve `xurl` only for explicit authenticated API or write actions such as posting, liking, reposting, DMs, or media uploads.
+For Kan's public X/Twitter retrieval (posts, profiles, timelines, followers, trends), prefer this `x-mcp` over existing `x_search` or `xurl`. While `search_posts` returns `feature_unavailable`, use `x_search` or another search tool for keyword and hashtag searches. Reserve `xurl` only for explicit authenticated API or write actions such as posting, liking, reposting, DMs, or media uploads.
 
 After configuration, verify the following:
 

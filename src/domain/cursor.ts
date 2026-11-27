@@ -1,15 +1,16 @@
 /**
- * Stateless pagination cursors: "xc1." + base64url(JSON [scope, up, seam, returned]) + "." + fnv1a32 checksum.
+ * Stateless pagination cursors: "xc1." + base64url(JSON [scope, up, seam, returned, stop?]) + "." + fnv1a32 checksum.
  * - scope binds the cursor to the tool and its arguments
  * - up is the upstream cursor of the page being sliced (null = newest page)
  * - seam is the key of the previous upstream page's last item, skipped if it shows up again on this page
  * - returned holds 13-character keys of the items already returned from this page (see paginate.ts)
+ * - stop (newest page only) is the key of the first item the previous call left unread
  * The checksum only detects corruption (e.g. a model dropping characters); cursors are not a security boundary.
  */
 import { corruptCursor, cursorScopeMismatch, cursorVersion } from '../contract/messages';
 import { CURSOR_MAX_LEN, CURSOR_MAX_RETURNED } from '../contract/limits';
 
-export type CursorState = { up: string | null; seam: string | null; returned: string };
+export type CursorState = { up: string | null; seam: string | null; returned: string; stop?: string };
 
 export type CursorScope =
   | { tool: 'get_profile_statuses'; handle: string; includeReplies: boolean }
@@ -82,7 +83,8 @@ export function describeScopeKey(key: string): string {
 }
 
 export function encodeCursor(scope: string, state: CursorState): string {
-  const body = PREFIX + base64UrlEncode(JSON.stringify([scope, state.up, state.seam, state.returned]));
+  const fields = [scope, state.up, state.seam, state.returned, ...(state.stop === undefined ? [] : [state.stop])];
+  const body = PREFIX + base64UrlEncode(JSON.stringify(fields));
   return `${body}.${fnv1a32(body)}`;
 }
 
@@ -115,17 +117,19 @@ function parsePayload(payload: string): { scope: string; state: CursorState } {
   } catch {
     throw corruptCursor();
   }
-  if (!Array.isArray(parsed) || parsed.length !== 4) throw corruptCursor();
-  const [scope, up, seam, returned] = parsed as unknown[];
+  if (!Array.isArray(parsed) || (parsed.length !== 4 && parsed.length !== 5)) throw corruptCursor();
+  const [scope, up, seam, returned, stop] = parsed as unknown[];
+  const isKey = (value: unknown): value is string => typeof value === 'string' && KEY_RE.test(value);
   const valid =
     typeof scope === 'string' &&
     scope.length <= MAX_SCOPE_LENGTH &&
     (up === null || isCarriedCursor(up)) &&
-    (seam === null || (typeof seam === 'string' && KEY_RE.test(seam))) &&
+    (seam === null || isKey(seam)) &&
     typeof returned === 'string' &&
-    RETURNED_RE.test(returned);
+    RETURNED_RE.test(returned) &&
+    (parsed.length === 4 || (up === null && isKey(stop)));
   if (!valid) throw corruptCursor();
-  return { scope, state: { up, seam, returned } };
+  return { scope, state: isKey(stop) ? { up, seam, returned, stop } : { up, seam, returned } };
 }
 
 /** FNV-1a 32-bit hash of the UTF-16 code units, as 8 lowercase hex characters. */

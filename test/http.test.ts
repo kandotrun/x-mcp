@@ -41,6 +41,10 @@ describe('HTTP routes', () => {
       mcpServers: { x: { url: `${ORIGIN}/mcp` } },
       tools: [...TOOL_NAMES]
     });
+    // Keyword search is unavailable upstream, so the description does not advertise it.
+    expect(((await (await app.request(`${ORIGIN}/.well-known/mcp.json`, {}, ENV)).json()) as { description: string }).description).not.toMatch(
+      /search/i
+    );
   });
 
   it('serves a landing page that shows how to connect', async () => {

@@ -10,7 +10,7 @@ import { VERSION } from './version';
 
 type Bindings = { Bindings: ConfigEnv };
 
-const DESCRIPTION = 'Read-only MCP server for public X/Twitter search and retrieval via twitter.2-38.com.';
+const DESCRIPTION = 'Read-only MCP server for public X/Twitter posts, profiles, timelines and trends via twitter.2-38.com.';
 
 export function createApp(deps: ServerDeps = {}): Hono<Bindings> {
   const app = new Hono<Bindings>();

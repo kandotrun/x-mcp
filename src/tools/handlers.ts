@@ -77,13 +77,18 @@ export async function getProfile(args: ToolArgs<'get_profile'>, { session }: Too
   }
   const user = outcome.kind === 'ok' ? rec(outcome.body.user) : undefined;
   if (user === undefined) throw unexpectedResponse();
-  const note = user.protected === true ? notes.protectedProfile : undefined;
-  const projected: unknown =
-    args.response_format === 'detailed' && fits({ user: stripMosaic(user) }, MAX_RESULT_CHARS)
-      ? stripMosaic(user)
-      : projectUser(user, { includeAbout: args.include_about });
-  return note === undefined ? { user: projected } : { user: projected, note };
+  const protectedNote = user.protected === true ? notes.protectedProfile : undefined;
+  const concise = () => projectUser(user, { includeAbout: args.include_about });
+  if (args.response_format === 'detailed') {
+    const detailed = withNote({ user: stripMosaic(user) }, protectedNote);
+    if (fits(detailed, MAX_RESULT_CHARS)) return detailed;
+    return withNote({ user: concise() }, joinNotes(protectedNote, notes.detailedTooLarge));
+  }
+  return withNote({ user: concise() }, protectedNote);
 }
+
+const joinNotes = (...parts: (string | undefined)[]) => parts.filter((part) => part !== undefined).join(' ');
+const withNote = (result: Rec, note: string | undefined): Rec => (note === undefined || note === '' ? result : { ...result, note });
 
 // ---------------------------------------------------------------------------------------------
 // Lists
@@ -122,7 +127,7 @@ const ENVELOPE_OVERHEAD = 600;
 export function itemBudgetFor(scope: string, state: CursorState, count: number): number {
   const seam = 'z'.repeat(KEY_LENGTH);
   const keys = 'z'.repeat(KEY_LENGTH * Math.min(CURSOR_MAX_RETURNED, state.returned.length / KEY_LENGTH + count));
-  const samePage = encodeCursor(scope, { up: state.up, seam, returned: keys }).length;
+  const samePage = encodeCursor(scope, { up: state.up, seam, returned: keys, stop: seam }).length;
   // After a hop the cursor can carry the longest issued bottom cursor and this call's keys.
   const hopped = encodeCursor(scope, { up: 'x'.repeat(MAX_UPSTREAM_CURSOR), seam, returned: keys }).length;
   return MAX_RESULT_CHARS - ENVELOPE_OVERHEAD - Math.max(samePage, hopped);
@@ -151,20 +156,30 @@ async function listPage(request: ListRequest): Promise<Rec> {
     return fallback;
   };
   let serverErrorChecked = false;
+  let fetches = 0;
+  // The last page fetched offered a next page, but with a cursor this server cannot carry in next_cursor.
+  let bottomDropped = false;
   const fetchPage = async (up: string | null): Promise<Page> => {
+    const firstFetch = fetches++ === 0;
     let outcome;
     try {
       outcome = await session.fetch(request.route(up), request.context);
     } catch (error) {
-      if (up === null && !serverErrorChecked && error instanceof ToolError && error.upstreamStatus === 500 && request.onFirstPageServerError) {
+      // Only on a call's first request, so the lookup (up to 2 requests) stays within the 3-request cap.
+      const check = firstFetch && up === null && !serverErrorChecked && request.onFirstPageServerError;
+      if (check && error instanceof ToolError && error.upstreamStatus === 500) {
         serverErrorChecked = true;
-        await request.onFirstPageServerError();
+        await check();
       }
       throw error;
     }
-    if (outcome.kind === 'empty') return { items: [], bottom: null };
+    bottomDropped = false;
+    if (outcome.kind === 'empty') return { items: [], bottom: null, missing: true };
+    const items = arr(outcome.body.results);
     const bottom = rec(outcome.body.cursor)?.bottom;
-    return { items: arr(outcome.body.results), bottom: isUpstreamCursor(bottom) ? bottom : null };
+    if (isUpstreamCursor(bottom)) return { items, bottom };
+    bottomDropped = items.length > 0 && typeof bottom === 'string' && bottom !== '';
+    return { items, bottom: null };
   };
   const run = () => paginate({ state, count, fetchPage, project, budget });
 
@@ -176,7 +191,11 @@ async function listPage(request: ListRequest): Promise<Rec> {
     result = diagnosed;
   }
   const returnedAny = (set: WeakSet<object>) => result.items.some((item) => typeof item === 'object' && item !== null && set.has(item));
-  return listEnvelope(kind, scope, count, result, { detailedFellBack: returnedAny(fallbacks), tooLarge: returnedAny(stubs) });
+  return listEnvelope(kind, scope, count, result, {
+    detailedFellBack: returnedAny(fallbacks),
+    tooLarge: returnedAny(stubs),
+    cutShort: !result.hasMore && bottomDropped
+  });
 }
 
 function listEnvelope(
@@ -184,7 +203,7 @@ function listEnvelope(
   scope: string,
   count: number,
   result: PaginateResult<unknown>,
-  flags: { detailedFellBack: boolean; tooLarge: boolean }
+  flags: { detailedFellBack: boolean; tooLarge: boolean; cutShort: boolean }
 ): Rec {
   const returned = result.items.length;
   const envelope: Rec = { [kind.key]: result.items, returned, has_more: result.hasMore };
@@ -193,7 +212,8 @@ function listEnvelope(
   const parts: string[] = [];
   if (result.truncated) parts.push(notes.budget(returned, kind.plural));
   else if (result.pageEnded) parts.push(notes.pageEnded(returned, count));
-  if (result.endOfList && returned === 0) parts.push(notes.noMore(kind.plural));
+  if (flags.cutShort) parts.push(notes.cutShort(kind.plural));
+  else if (result.endOfList && returned === 0) parts.push(notes.noMore(kind.plural));
   if (flags.detailedFellBack) parts.push(notes.detailedItemsTooLarge(kind.plural));
   if (flags.tooLarge) parts.push(notes.itemsTooLarge(kind.plural));
   if (parts.length > 0) envelope.note = parts.join(' ');
@@ -216,12 +236,22 @@ function diagnoseAccount(
   }
 ): EmptyFirstPage {
   return async (retry) => {
-    const user = await lookUpAccount(session, handle);
+    let user: Rec;
+    try {
+      user = await lookUpAccount(session, handle);
+    } catch (error) {
+      // The profile answers "not found" transiently too; one more look at the list tells a flake from a missing account.
+      if (!(error instanceof ToolError) || error.code !== 'not_found') throw error;
+      const retried = await retry();
+      if (retried.items.length > 0 || retried.hasMore) return retried;
+      throw error;
+    }
     const listed = options.counter === undefined ? undefined : num(user[options.counter]);
     if (listed === undefined || listed === 0) return { note: options.emptyNote };
     const retried = await retry();
     if (retried.items.length > 0 || retried.hasMore) return retried;
-    if (options.listedButEmptyNote !== undefined) return { note: options.listedButEmptyNote(listed) };
+    // Only an empty list (not a "not found") shows that the listing really excludes everything the counter counts.
+    if (options.listedButEmptyNote !== undefined && !retried.firstPageMissing) return { note: options.listedButEmptyNote(listed) };
     throw timelineMissing(handle, options.what, listed);
   };
 }
@@ -424,7 +454,7 @@ export async function typeahead(args: ToolArgs<'typeahead'>, { session }: ToolCo
 
 export async function getTrends(args: ToolArgs<'get_trends'>, { session }: ToolContext) {
   const outcome = await session.fetch(routes.trends({ count: Math.min(args.count, TRENDS_UPSTREAM_MAX) }), {});
-  const trends = (outcome.kind === 'ok' ? arr(outcome.body.trends) : []).slice(0, args.count).map(projectTrend);
+  const trends = (outcome.kind === 'ok' ? arr(outcome.body.trends) : []).slice(0, Math.min(args.count, TRENDS_UPSTREAM_MAX)).map(projectTrend);
   const parts: string[] = [];
   if (trends.length === 0) parts.push(notes.noTrends);
   if (args.count > TRENDS_UPSTREAM_MAX) parts.push(notes.trendsClamped);

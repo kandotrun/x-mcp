@@ -6,6 +6,8 @@ import { idKey, paginate, type Page } from '../src/domain/paginate';
 type Item = { id: string; text?: string };
 
 const START: CursorState = { up: null, seam: null, returned: '' };
+/** The upstream answered "not found" (or "no content") instead of a list, which it also does transiently. */
+const MISSING: Page = { items: [], bottom: null, missing: true };
 const project = (item: unknown) => ({ id: (item as Item).id, text: (item as Item).text });
 const prints = (...ids: string[]) => ids.map(idKey).join('');
 
@@ -74,7 +76,7 @@ describe('paginate', () => {
     expect(await drain(timeline.fetchPage, count)).toEqual(timeline.items.map((item) => item.id));
   });
 
-  it('reads exactly one upstream page per call in a normal drain', async () => {
+  it('reads one upstream page per call in a normal drain, and the empty end page twice', async () => {
     const timeline = new FakeTimeline(20, 5);
     const counts: number[] = [];
     let state = START;
@@ -85,7 +87,7 @@ describe('paginate', () => {
       if (!result.hasMore) break;
       state = result.next!;
     }
-    expect(counts.every((n) => n === 1)).toBe(true);
+    expect(counts).toEqual([1, 1, 1, 1, 2]);
   });
 
   it('enforces count even though the upstream page is larger and remembers what it returned', async () => {
@@ -116,6 +118,155 @@ describe('paginate', () => {
   it('flags an empty first page so callers can diagnose the account', async () => {
     const result = await paginate({ state: START, count: 5, fetchPage: new FakeTimeline(0).fetchPage, project });
     expect(result).toMatchObject({ items: [], hasMore: false, firstPageEmpty: true });
+
+    const missing = await paginate({ state: START, count: 5, fetchPage: async () => MISSING, project });
+    expect(missing).toMatchObject({ items: [], hasMore: false, firstPageEmpty: true });
+  });
+
+  it('asks once more for a continuation page the upstream answers "not found", and fails retryably if that persists', async () => {
+    const timeline = new FakeTimeline(10, 10);
+    const first = await paginate({ state: START, count: 4, fetchPage: timeline.fetchPage, project });
+    let failures = 1;
+    const flaky = async (up: string | null) => (failures-- > 0 ? MISSING : timeline.fetchPage(up));
+
+    const second = await paginate({ state: first.next!, count: 4, fetchPage: flaky, project });
+    expect(second.items.map((item) => item.id)).toEqual(['1006', '1005', '1004', '1003']);
+
+    const requested: (string | null)[] = [];
+    const gone = async (up: string | null) => (requested.push(up), MISSING);
+    for (const state of [second.next!, { up: 'after-1001', seam: idKey('1001'), returned: '' }, { up: 'DAAB', seam: null, returned: '' }]) {
+      requested.length = 0;
+      await expect(paginate({ state, count: 4, fetchPage: gone, project })).rejects.toMatchObject({ code: 'upstream_unavailable', retryable: true });
+      expect(requested).toEqual([state.up, state.up]);
+    }
+  });
+
+  it('treats an empty answer for a page that still had unread items as a transient failure', async () => {
+    const timeline = new FakeTimeline(10, 10);
+    const first = await paginate({ state: START, count: 4, fetchPage: timeline.fetchPage, project });
+    let failures = 1;
+    const flaky = async (up: string | null): Promise<Page> => (failures-- > 0 ? { items: [], bottom: 'after-end' } : timeline.fetchPage(up));
+
+    const second = await paginate({ state: first.next!, count: 4, fetchPage: flaky, project });
+    expect(second.items.map((item) => item.id)).toEqual(['1006', '1005', '1004', '1003']);
+
+    const empty = async (): Promise<Page> => ({ items: [], bottom: 'after-end' });
+    await expect(paginate({ state: second.next!, count: 4, fetchPage: empty, project })).rejects.toMatchObject({
+      code: 'upstream_unavailable',
+      retryable: true
+    });
+  });
+
+  it('asks again at most once per call, hops included, so one call makes at most 3 upstream requests', async () => {
+    const state = { up: null, seam: null, returned: prints('1002') };
+    const run = async (newestFails: boolean, hopPage: Page) => {
+      const requested: (string | null)[] = [];
+      let newest = newestFails ? 1 : 0;
+      const fetchPage = async (up: string | null): Promise<Page> => {
+        requested.push(up);
+        if (up === null) return newest-- > 0 ? MISSING : { items: [{ id: '1002' }], bottom: 'p2' };
+        return hopPage;
+      };
+      const result = await paginate({ state, count: 2, fetchPage, project }).catch((error: unknown) => error);
+      return { requested, result };
+    };
+
+    // The hop page is asked for twice and stays "not found".
+    expect(await run(false, MISSING)).toMatchObject({ requested: [null, 'p2', 'p2'], result: { code: 'upstream_unavailable', retryable: true } });
+    // The retry went to the newest page, so the next call asks for the hop page again instead of ending the list.
+    for (const hopPage of [MISSING, { items: [], bottom: 'p3' }]) {
+      expect(await run(true, hopPage)).toMatchObject({
+        requested: [null, null, 'p2'],
+        result: { items: [], hasMore: true, pageEnded: true, next: { up: 'p2', seam: idKey('1002'), returned: '' } }
+      });
+    }
+  });
+
+  it('keeps an unread entry above a lower duplicate of a returned one when the upper copy is deleted', async () => {
+    let ids = ['91', '90', '91', '89'];
+    const fetchPage = async (up: string | null): Promise<Page> => ({ items: (up === null ? ids : []).map((id) => ({ id })), bottom: up === null ? 'p2' : 'p3' });
+    const seen = await drain(fetchPage, 1, () => {
+      // The upper copy of 91 (for example a repost entry) is removed after the first call.
+      if (ids.length === 4) ids = ['90', '91', '89'];
+    });
+    expect(seen).toEqual(['91', '90', '89']);
+  });
+
+  it('never loses a post while posts arrive, reposts come and go, entries are deleted and pages answer "not found"', async () => {
+    const random = prng(29);
+    for (let trial = 0; trial < 1500; trial++) {
+      // Newest-first entries with a sort index; bottom cursors are positions, as on X. A copy is a repost entry.
+      type Entry = { id: string; sort: number; copy?: boolean; gone?: boolean };
+      let nextId = 10_000;
+      let top = 0;
+      const pageSize = 3 + Math.floor(random() * 20);
+      const timeline: Entry[] = Array.from({ length: 5 + Math.floor(random() * 60) }, (_, k) => ({ id: String(nextId++), sort: -k * 10 }));
+      const initial = [...timeline];
+      const count = 1 + Math.floor(random() * 12);
+      // Busy lists get more new entries between calls than one call returns.
+      const busy = random() < 0.5;
+      let flaky = false;
+      let requests = 0;
+      const fetchPage = async (up: string | null): Promise<Page> => {
+        requests++;
+        if (flaky && random() < 0.2) return MISSING;
+        const below = up === null ? Number.POSITIVE_INFINITY : Number(up.slice(1));
+        const entries = timeline.filter((entry) => entry.sort < below).slice(0, pageSize);
+        return { items: entries.map((entry) => ({ id: entry.id })), bottom: `s${entries.at(-1)?.sort ?? -1e9}` };
+      };
+      const seen: string[] = [];
+      let state = START;
+      for (let call = 0; ; call++) {
+        if (call > 2_000) throw new Error(`trial ${trial} did not terminate`);
+        requests = 0;
+        const result = await paginate({ state, count, fetchPage, project }).catch((error: unknown) => {
+          if (error instanceof ToolError && error.retryable) return undefined;
+          throw error;
+        });
+        expect(requests, `trial ${trial}`).toBeLessThanOrEqual(3);
+        if (result === undefined) continue;
+        flaky = true;
+        seen.push(...result.items.map((item) => item.id));
+        if (!result.hasMore) break;
+        state = result.next!;
+        const arrivals = busy ? count + 1 + Math.floor(random() * Math.max(1, pageSize - count - 1)) : random() < 0.3 ? 1 + Math.floor(random() * 3) : 0;
+        for (let k = 0; k < arrivals; k++) {
+          const repost = random() < 0.1;
+          const id = repost ? timeline[Math.floor(random() * timeline.length)]!.id : String(nextId++);
+          timeline.unshift({ id, sort: (top += 10), copy: repost });
+        }
+        if (random() < 0.25) timeline.splice(Math.floor(random() * timeline.length), 1).forEach((entry) => (entry.gone = true));
+        const repostIndex = timeline.findIndex((entry) => entry.copy);
+        if (random() < 0.15 && repostIndex >= 0) timeline.splice(repostIndex, 1).forEach((entry) => (entry.gone = true));
+      }
+      const missing = initial.filter((entry) => !entry.gone && !seen.includes(entry.id)).map((entry) => entry.id);
+      expect(missing, `trial ${trial}`).toEqual([]);
+    }
+  });
+
+  it('never loses a post when the upstream randomly answers "not found" for pages after the first', async () => {
+    const random = prng(23);
+    for (let trial = 0; trial < 500; trial++) {
+      const timeline = new FakeTimeline(1 + Math.floor(random() * 40), 2 + Math.floor(random() * 8));
+      let flaky = false;
+      const fetchPage = async (up: string | null) => (flaky && random() < 0.3 ? MISSING : timeline.fetchPage(up));
+      const count = 1 + Math.floor(random() * 6);
+      const seen: string[] = [];
+      let state = START;
+      for (let call = 0; ; call++) {
+        if (call > 1_000) throw new Error(`trial ${trial} did not terminate`);
+        const result = await paginate({ state, count, fetchPage, project }).catch((error: unknown) => {
+          if (error instanceof ToolError && error.retryable) return undefined;
+          throw error;
+        });
+        if (result === undefined) continue;
+        flaky = true;
+        seen.push(...result.items.map((item) => item.id));
+        if (!result.hasMore) break;
+        state = result.next!;
+      }
+      expect(seen, `trial ${trial}`).toEqual(timeline.items.map((item) => item.id));
+    }
   });
 
   it('skips the item repeated at a page seam', async () => {
@@ -133,7 +284,7 @@ describe('paginate', () => {
     expect(seen).toHaveLength(6);
   });
 
-  it('returns posts added at the top in a later call and never repeats or skips the rest', async () => {
+  it('skips posts added at the top after the first call and never repeats or skips the rest', async () => {
     const timeline = new FakeTimeline(13);
     const original = timeline.items.map((item) => item.id);
     let next = 5000;
@@ -141,8 +292,26 @@ describe('paginate', () => {
     const seen = await drain(timeline.fetchPage, 3, () => {
       timeline.items.unshift({ id: String(next++) }, { id: String(next++) });
     });
-    expect(seen.filter((id) => original.includes(id))).toEqual(original);
-    expect(new Set(seen).size).toBe(seen.length);
+    expect(seen).toEqual(original);
+  });
+
+  it('gets past the newest page even when more posts arrive at its top between calls than one call returns', async () => {
+    for (const [count, arrivals] of [[1, 2], [5, 6], [10, 11], [10, 19]] as const) {
+      // Newest-first entries with a sort index; bottom cursors are positions, as on X.
+      let top = 0;
+      const timeline = Array.from({ length: 60 }, (_, k) => ({ id: String(1000 + k), sort: -k }));
+      const fetchPage = async (up: string | null): Promise<Page> => {
+        const below = up === null ? Number.POSITIVE_INFINITY : Number(up.slice(1));
+        const entries = timeline.filter((entry) => entry.sort < below).slice(0, 20);
+        return { items: entries.map((entry) => ({ id: entry.id })), bottom: `s${entries.at(-1)?.sort ?? -1e9}` };
+      };
+      const original = timeline.map((entry) => entry.id);
+      let next = 5000;
+      const seen = await drain(fetchPage, count, () => {
+        for (let k = 0; k < arrivals; k++) timeline.unshift({ id: String(next++), sort: ++top });
+      });
+      expect(original.filter((id) => !seen.includes(id)), `count ${count}, ${arrivals} new per call`).toEqual([]);
+    }
   });
 
   it('stays lossless when the last returned post is deleted between calls', async () => {
@@ -173,6 +342,10 @@ describe('paginate', () => {
     expect(requested).toEqual([null, 'after-1007']);
     expect(second.items.map((item) => item.id)).toEqual(['1005', '1004', '1003', '1002']);
     expect(second.next).toEqual({ up: 'after-1007', seam: idKey('1007'), returned: prints('1005', '1004', '1003', '1002') });
+
+    // An empty page reached by a hop is the real end of the list.
+    const end = async (up: string | null): Promise<Page> => (up === null ? { items: ids(1010, 1007), bottom: 'p2' } : { items: [], bottom: 'p3' });
+    expect(await paginate({ state: first.next!, count: 4, fetchPage: end, project })).toMatchObject({ items: [], hasMore: false, endOfList: true });
   });
 
   it('ends the list instead of looping when the upstream stops advancing', async () => {

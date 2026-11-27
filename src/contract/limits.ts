@@ -6,7 +6,8 @@ export const MAX_RESULT_CHARS = 30_000;
 export const ITEM_BUDGET = 29_000;
 
 export const LIST_TEXT_MAX = 1_000;
-export const POST_TEXT_MAX = 20_000;
+/** X's maximum post length, so get_post always returns the whole text of a post. */
+export const POST_TEXT_MAX = 25_000;
 export const ARTICLE_TEXT_MAX = 20_000;
 export const QUOTE_TEXT_MAX_LIST = 280;
 export const QUOTE_TEXT_MAX_POST = 1_000;

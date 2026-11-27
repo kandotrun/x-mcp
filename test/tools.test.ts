@@ -73,6 +73,16 @@ describe('get_post', () => {
     expect(result.text).not.toContain('\n');
   });
 
+  it('returns the whole text of the longest post X allows', async () => {
+    const text = `${'a'.repeat(24_999)}😀`.slice(0, 25_000);
+    const fake = fakeUpstream(() => json({ ...status, status: { ...status.status, text } }));
+    const result = await call(await connect(fake.fetch), 'get_post', { id: '2000000000000000100' });
+
+    expect(result.text.length).toBeLessThanOrEqual(MAX_RESULT_CHARS);
+    expect(result.data.post).toMatchObject({ text });
+    expect(result.data.post).not.toHaveProperty('text_truncated');
+  });
+
   it('returns the upstream object without mosaic in detailed mode', async () => {
     const result = await call(await connect(upstream().fetch), 'get_post', { id: '2000000000000000100', response_format: 'detailed' });
 
@@ -161,6 +171,27 @@ describe('get_profile', () => {
     expect((await call(client, 'get_profile', { handle: 'locked' })).data.note).toMatch(/protected/);
     expect((await call(client, 'get_profile', { handle: 'nobody' })).data).toMatchObject({ code: 'not_found' });
     expect((await call(client, 'get_profile', { handle: 'gone' })).data).toMatchObject({ code: 'restricted' });
+  });
+
+  it('keeps a detailed profile and its note under 30,000 characters, and notes a concise fallback', async () => {
+    const locked = { ...profile.user, screen_name: 'locked', protected: true, banner_url: '' };
+    // The detailed object alone fits, but not together with the protected-account note.
+    locked.banner_url = 'b'.repeat(MAX_RESULT_CHARS - 20 - JSON.stringify({ user: stripMosaic(locked) }).length);
+    const huge = { ...profile.user, banner_url: 'b'.repeat(MAX_RESULT_CHARS) };
+    const fake = fakeUpstream((url) => json({ ...profile, user: url.pathname.endsWith('/locked') ? locked : huge }));
+    const client = await connect(fake.fetch);
+
+    const near = await call(client, 'get_profile', { handle: 'locked', response_format: 'detailed' });
+    expect(near.text.length).toBeLessThanOrEqual(MAX_RESULT_CHARS);
+    expect(UserResultSchema.parse(near.data).user).toMatchObject({ handle: 'locked', protected: true });
+    expect(near.data.note).toBe(
+      'This account is protected: its posts are not publicly visible, so get_profile_statuses and get_profile_media return code "restricted". ' +
+        'The detailed object exceeded 30,000 characters, so the concise form is returned.'
+    );
+
+    const large = await call(client, 'get_profile', { handle: 'example_dev', response_format: 'detailed' });
+    expect(UserResultSchema.parse(large.data).user).toMatchObject({ handle: 'example_dev' });
+    expect(large.data.note).toBe('The detailed object exceeded 30,000 characters, so the concise form is returned.');
   });
 });
 
@@ -282,6 +313,59 @@ describe('get_profile_statuses', () => {
     expect(second.text.length).toBeLessThanOrEqual(30_000);
   });
 
+  it('asks again when the upstream answers a later page with "not found", and never ends the list early', async () => {
+    const pages = {
+      first: timelinePage({ bottom: 'PAGE-2' }),
+      second: timelinePage({ startId: 3000000000000000100n, bottom: 'PAGE-3' })
+    };
+    // The upstream answers this many upcoming requests with 404 "User not found", as it does transiently.
+    let flakes = 0;
+    const fake = fakeUpstream((url) => {
+      if (flakes > 0) {
+        flakes--;
+        return json(userNotFound, 404);
+      }
+      const cursor = url.searchParams.get('cursor');
+      if (cursor === null) return json(pages.first);
+      if (cursor === 'PAGE-2') return json(pages.second);
+      return json({ code: 200, results: [], cursor: { bottom: 'END' } });
+    });
+    const client = await connect(fake.fetch);
+    const page = async (cursor: unknown, flakesBefore: number) => {
+      flakes = flakesBefore;
+      const before = fake.urls.length;
+      const result = await call(client, 'get_profile_statuses', { handle: 'example_dev', count: 10, cursor });
+      return { ...result, requests: fake.urls.length - before };
+    };
+
+    const first = await call(client, 'get_profile_statuses', { handle: 'example_dev', count: 10 });
+    const seen = [...PostListSchema.parse(first.data).posts.map((post) => post.id)];
+    const second = await page(first.data.next_cursor, 1);
+    expect(second).toMatchObject({ requests: 2, data: { returned: 10, has_more: true } });
+    seen.push(...PostListSchema.parse(second.data).posts.map((post) => post.id));
+
+    const failed = await page(second.data.next_cursor, 2);
+    expect(failed).toMatchObject({ requests: 2, data: { code: 'upstream_unavailable', retryable: true } });
+
+    let cursor = second.data.next_cursor;
+    for (let i = 0; i < 5 && cursor !== undefined; i++) {
+      const next = PostListSchema.parse((await page(cursor, 0)).data);
+      seen.push(...next.posts.map((post) => post.id));
+      cursor = next.next_cursor;
+    }
+    expect(seen).toEqual([...pages.first.results, ...pages.second.results].map((post) => post.id));
+  });
+
+  it('says so when the upstream offers a next page with a cursor this server cannot pass on', async () => {
+    for (const bottom of ['x'.repeat(513), 'page "two"', 'ünïcode']) {
+      const fake = fakeUpstream(() => json(timelinePage({ size: 3, bottom })));
+      const result = await call(await connect(fake.fetch), 'get_profile_statuses', { handle: 'jack', count: 10 });
+
+      expect(result.data, bottom).toMatchObject({ returned: 3, has_more: false });
+      expect(result.data.note, bottom).toBe('X offered more posts, but with a cursor this server cannot pass on, so the list stops here.');
+    }
+  });
+
   it('rejects a cursor issued for another account', async () => {
     const client = await connect(fakeUpstream(() => json(timelinePage())).fetch);
     const first = await call(client, 'get_profile_statuses', { handle: 'jack', count: 1 });
@@ -317,6 +401,24 @@ describe('get_profile_statuses', () => {
     expect(broken.data).toMatchObject({ code: 'upstream_unavailable', retryable: true });
   });
 
+  it('asks for the timeline once more when it and the profile both answer "not found" for an existing account', async () => {
+    let timelineCalls = 0;
+    const flaky = fakeUpstream((url) => {
+      if (url.pathname.endsWith('/statuses')) return timelineCalls++ === 0 ? json(userNotFound, 404) : json(timelinePage({ size: 3 }));
+      return json(userNotFound, 404);
+    });
+    const recovered = await call(await connect(flaky.fetch), 'get_profile_statuses', { handle: 'example_dev' });
+    expect(recovered.data).toMatchObject({ returned: 3 });
+    expect(flaky.paths()).toEqual(['/2/profile/example_dev/statuses', '/2/profile/example_dev', '/2/profile/example_dev/statuses']);
+
+    const unknown = fakeUpstream(() => json(userNotFound, 404));
+    expect((await call(await connect(unknown.fetch), 'get_profile_followers', { handle: 'nobody' })).data).toMatchObject({
+      code: 'not_found',
+      retryable: true
+    });
+    expect(unknown.urls).toHaveLength(3);
+  });
+
   it('treats an empty default timeline of an account with only replies as a success with a hint', async () => {
     const fake = fakeUpstream((url) =>
       url.pathname.endsWith('/statuses')
@@ -332,6 +434,13 @@ describe('get_profile_statuses', () => {
       note: 'X returned no posts without replies for @replier, although its profile lists 7 posts; try include_replies=true.'
     });
     expect(fake.urls).toHaveLength(3);
+
+    // "Not found" twice is an upstream failure, not an empty timeline.
+    const flaky = fakeUpstream((url) => (url.pathname.endsWith('/statuses') ? json(userNotFound, 404) : json({ ...profile, user: { ...profile.user, statuses: 7 } })));
+    expect((await call(await connect(flaky.fetch), 'get_profile_statuses', { handle: 'jack' })).data).toMatchObject({
+      code: 'upstream_unavailable',
+      retryable: true
+    });
   });
 
   it('reports protected accounts as restricted when the upstream answers the timeline with HTTP 500', async () => {
@@ -496,6 +605,11 @@ describe('get_trends and get_openapi', () => {
     expect(TrendsResultSchema.parse(result.data)).toMatchObject({ returned: 3, note: 'count was reduced to 50, the upstream maximum.' });
     expect(fake.paths()).toEqual(['/2/trends?count=50']);
     expect((await call(client, 'get_trends', { count: 2 })).data.returned).toBe(2);
+
+    // Even if the upstream returns more than it was asked for, at most 50 come back, as the note says.
+    const many = { ...trends, trends: Array.from({ length: 80 }, (_, i) => ({ ...trends.trends[0], name: `#Trend${i}` })) };
+    const clamped = await call(await connect(fakeUpstream(() => json(many)).fetch), 'get_trends', { count: 100 });
+    expect(clamped.data).toMatchObject({ returned: 50, note: 'count was reduced to 50, the upstream maximum.' });
   });
 
   it('treats no trends as a success', async () => {
