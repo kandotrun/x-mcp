@@ -201,6 +201,29 @@ describe('paginate', () => {
     }
   });
 
+  it('ends the list when either answer for a later page is an empty list, and fails only when both are "not found"', async () => {
+    const state = { up: 'p2', seam: idKey('1001'), returned: '' };
+    const answers = (...pages: Page[]) => {
+      const queue = [...pages];
+      return async (): Promise<Page> => queue.shift()!;
+    };
+    const empty: Page = { items: [], bottom: 'END-1' };
+    for (const pages of [[empty, MISSING], [MISSING, empty], [empty, empty]]) {
+      expect(await paginate({ state, count: 5, fetchPage: answers(...pages), project })).toMatchObject({ items: [], hasMore: false, endOfList: true });
+    }
+    await expect(paginate({ state, count: 5, fetchPage: answers(MISSING, MISSING), project })).rejects.toMatchObject({ code: 'upstream_unavailable' });
+  });
+
+  it('keeps unread entries when the first several entries left unread are deleted together with an upper duplicate', async () => {
+    let ids = ['105', '104', '103', '101', '102', '101'];
+    const fetchPage = async (up: string | null): Promise<Page> => ({ items: (up === null ? ids : []).map((id) => ({ id })), bottom: up === null ? 'p2' : 'p3' });
+    const seen = await drain(fetchPage, 1, () => {
+      // 104, 103 and the upper 101 go away after the first call; 102 and the lower 101 stay.
+      if (ids.length === 6) ids = ['105', '102', '101'];
+    });
+    expect(seen).toEqual(['105', '102', '101']);
+  });
+
   it('keeps an unread entry above a lower duplicate of a returned one when the upper copy is deleted', async () => {
     let ids = ['91', '90', '91', '89'];
     const fetchPage = async (up: string | null): Promise<Page> => ({ items: (up === null ? ids : []).map((id) => ({ id })), bottom: up === null ? 'p2' : 'p3' });

@@ -54,13 +54,13 @@ describe('encodeCursor / decodeCursor', () => {
   });
 
   it('round-trips the unread entries remembered on the newest page, and only there', () => {
-    const stop = idKey('91') + idKey('90') + idKey('89');
+    const stop = Array.from({ length: 20 }, (_, i) => idKey(String(90 - i))).join('');
     for (const value of [idKey('91'), stop]) {
       const state = { up: null, seam: null, returned: idKey('92'), stop: value };
       expect(decodeCursor(encodeCursor(STATUSES, state), STATUSES)).toEqual(state);
     }
     for (const state of [
-      { up: null, seam: null, returned: '', stop: stop + idKey('88') },
+      { up: null, seam: null, returned: '', stop: stop + idKey('50') },
       { up: 'DAAB', seam: null, returned: '', stop: idKey('91') },
       { up: null, seam: null, returned: '', stop: 'not-a-key' }
     ]) {

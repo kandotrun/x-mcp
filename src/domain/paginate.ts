@@ -8,9 +8,9 @@
  * on its newest page.
  *
  * One upstream page per call, plus a single hop when nothing on the current page is left to return, and one retry per
- * call when a page after the first comes back empty or "not found" (the upstream answers both transiently). An empty
- * page ends the list once it was asked for twice (the upstream returns a fresh bottom cursor even at the end);
- * "not found" never ends it.
+ * call when a page after the first comes back empty or "not found" (the upstream answers "not found" transiently).
+ * An empty list in either answer ends the list (the upstream returns a fresh bottom cursor even at the end); "not
+ * found" twice never does.
  */
 import { CURSOR_MAX_RETURNED, ITEM_BUDGET } from '../contract/limits';
 import { pageMissing, pageTooLarge } from '../contract/messages';
@@ -78,7 +78,7 @@ function keys(value: string): Set<string> {
 }
 
 /** How many of the entries a call left unread on the newest page next_cursor remembers (see firstOld). */
-const STOP_KEYS = 3;
+export const STOP_KEYS = 20;
 
 /**
  * Index on the newest page where the previous call's unread entries begin: unread entries above it arrived later.
@@ -115,19 +115,22 @@ export async function paginate<T>(options: PaginateOptions<T>): Promise<Paginate
     // Only the first page of a listing can be empty from the start; callers diagnose that case.
     const first = up === null && !hopped && returned === '';
     let page = await fetchPage(up);
+    const emptyList = (answer: Page) => answer.items.length === 0 && answer.missing !== true;
     // Later pages come back empty transiently too: ask once more per call (one page, one retry and one hop at most).
     let askedTwice = false;
+    let endSeen = emptyList(page);
     if (!first && page.items.length === 0 && !retried) {
       retried = true;
       askedTwice = true;
       page = await fetchPage(up);
+      endSeen ||= emptyList(page);
     }
     const items = page.items;
     if (items.length === 0) {
       // This call already used its retry on the previous page, so let the next call ask for this one again.
       if (hopped && !askedTwice) return { ...base, items: [], hasMore: true, next: { up, seam, returned: '' }, pageEnded: true };
-      // "Not found" is not how a list ends, and a page the previous call stopped on still had unread items.
-      if (!first && (page.missing === true || returned !== '')) throw pageMissing();
+      // "Not found" twice is not how a list ends, and a page the previous call stopped on still had unread items.
+      if (!first && (!endSeen || returned !== '')) throw pageMissing();
       return { ...base, items: [], hasMore: false, endOfList: !first, firstPageEmpty: first, firstPageMissing: first && page.missing === true };
     }
 

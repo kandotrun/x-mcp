@@ -4,7 +4,7 @@
  * - up is the upstream cursor of the page being sliced (null = newest page)
  * - seam is the key of the previous upstream page's last item, skipped if it shows up again on this page
  * - returned holds 13-character keys of the items already returned from this page (see paginate.ts)
- * - stop (newest page only) holds the keys of the first items (up to 3) the previous call left unread
+ * - stop (newest page only) holds the keys of the first items (up to 20) the previous call left unread
  * The checksum only detects corruption (e.g. a model dropping characters); cursors are not a security boundary.
  */
 import { corruptCursor, cursorScopeMismatch, cursorVersion } from '../contract/messages';
@@ -27,7 +27,7 @@ export const MAX_UPSTREAM_CURSOR = 512;
 /** Bottom cursors the server issues: printable ASCII except quote and backslash, so their encoded size is predictable. */
 const UPSTREAM_CURSOR_RE = /^[\x21\x23-\x5B\x5D-\x7E]{1,512}$/;
 const KEY_RE = /^[0-9a-z]{13}$/;
-const STOP_RE = /^(?:[0-9a-z]{13}){1,3}$/;
+const STOP_RE = /^(?:[0-9a-z]{13}){1,20}$/;
 const RETURNED_RE = new RegExp(`^(?:[0-9a-z]{13}){0,${CURSOR_MAX_RETURNED}}$`);
 const MAX_SCOPE_LENGTH = 80;
 const START: CursorState = { up: null, seam: null, returned: '' };

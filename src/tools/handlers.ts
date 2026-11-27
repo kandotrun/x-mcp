@@ -5,11 +5,12 @@
 import type { Config } from '../config';
 import type { PostItem, User } from '../contract/envelopes';
 import { ToolError } from '../contract/errors';
-import { CURSOR_MAX_RETURNED, ITEM_BUDGET, MAX_RESULT_CHARS, TRENDS_UPSTREAM_MAX } from '../contract/limits';
+import { ARTICLE_TEXT_MAX, CURSOR_MAX_RETURNED, MAX_RESULT_CHARS, POST_TEXT_MAX, TRENDS_UPSTREAM_MAX } from '../contract/limits';
 import {
   accountProtected,
   emptyQuery,
   notes,
+  pageMissing,
   postNotFound,
   postRestricted,
   timelineMissing,
@@ -17,10 +18,10 @@ import {
 } from '../contract/messages';
 import type { ResponseFormat, ToolArgs } from '../contract/tools';
 import { decodeCursor, encodeCursor, isUpstreamCursor, MAX_UPSTREAM_CURSOR, scopeKey, type CursorState } from '../domain/cursor';
-import { KEY_LENGTH } from '../domain/paginate';
+import { KEY_LENGTH, STOP_KEYS } from '../domain/paginate';
 import { parseHandleRef, parsePostRef } from '../domain/normalize';
 import { paginate, type Page, type PaginateResult } from '../domain/paginate';
-import { projectPost, projectTrend, projectTypeaheadUser, projectUser, stripMosaic, tooLargePost } from '../domain/project';
+import { projectPost, projectTrend, projectTypeaheadUser, projectUser, stripMosaic, tooLargePost, type SingleLimits } from '../domain/project';
 import { routes, type Route } from '../upstream/routes';
 import type { UpstreamSession } from '../upstream/session';
 import type { ClassifyContext } from '../domain/classify';
@@ -54,14 +55,28 @@ export async function getPost(args: ToolArgs<'get_post'>, { session }: ToolConte
   if (args.response_format === 'detailed') {
     const detailed = { post: stripMosaic(status) };
     if (fits(detailed, MAX_RESULT_CHARS)) return detailed;
-    return { post: conciseSinglePost(status), note: notes.detailedTooLarge };
+    return { post: conciseSinglePost(status, singlePostBudget(notes.detailedTooLarge)), note: notes.detailedTooLarge };
   }
-  return { post: conciseSinglePost(status) };
+  return { post: conciseSinglePost(status, singlePostBudget()) };
 }
 
-function conciseSinglePost(raw: Rec): PostItem {
-  const post = projectPost(raw, 'single');
-  return fits(post, ITEM_BUDGET) ? post : projectPost(raw, 'single', OVERSIZED_SINGLE_LIMITS);
+/** Characters left for the post in a {post, note?} result. */
+const singlePostBudget = (note?: string) => MAX_RESULT_CHARS - JSON.stringify(note === undefined ? { post: 0 } : { post: 0, note }).length + 1;
+
+/** The whole post when it fits in one result; otherwise its text or Article body is cut only as far as needed. */
+function conciseSinglePost(raw: Rec, budget: number): PostItem {
+  const limits: Required<SingleLimits> = { textMax: POST_TEXT_MAX, articleMax: ARTICLE_TEXT_MAX };
+  for (let attempt = 0; attempt < 4; attempt++) {
+    const post = projectPost(raw, 'single', limits);
+    const overflow = JSON.stringify(post).length - budget;
+    if (overflow <= 0) return post;
+    const text = 'text' in post ? [...post.text].length : 0;
+    const article = 'article' in post && post.article?.text !== undefined ? [...post.article.text].length : 0;
+    // Each character removed saves at least one in JSON; the margin covers the ellipsis and the *_truncated flag.
+    if (article > text) limits.articleMax = Math.max(0, Math.min(limits.articleMax, article) - overflow - 32);
+    else limits.textMax = Math.max(0, Math.min(limits.textMax, text) - overflow - 32);
+  }
+  return projectPost(raw, 'single', OVERSIZED_SINGLE_LIMITS);
 }
 
 export async function getProfile(args: ToolArgs<'get_profile'>, { session }: ToolContext) {
@@ -130,7 +145,7 @@ const ENVELOPE_OVERHEAD = 600;
 export function itemBudgetFor(scope: string, state: CursorState, count: number): number {
   const seam = 'z'.repeat(KEY_LENGTH);
   const keys = 'z'.repeat(KEY_LENGTH * Math.min(CURSOR_MAX_RETURNED, state.returned.length / KEY_LENGTH + count));
-  const samePage = encodeCursor(scope, { up: state.up, seam, returned: keys, stop: seam.repeat(3) }).length;
+  const samePage = encodeCursor(scope, { up: state.up, seam, returned: keys, stop: seam.repeat(STOP_KEYS) }).length;
   // After a hop the cursor can carry the longest issued bottom cursor and this call's keys.
   const hopped = encodeCursor(scope, { up: 'x'.repeat(MAX_UPSTREAM_CURSOR), seam, returned: keys }).length;
   return MAX_RESULT_CHARS - ENVELOPE_OVERHEAD - Math.max(samePage, hopped);
@@ -308,6 +323,16 @@ const checkAccountOnServerError =
     await lookUpAccount(session, handle, true);
   };
 
+/** For lists without an account behind them: a first page that answered "not found" is asked for once more. */
+const emptyUnlessMissing =
+  (note: string): EmptyFirstPage =>
+  async (retry, first) => {
+    const result = first.firstPageMissing ? await retry() : first;
+    if (result.items.length > 0 || result.hasMore) return result;
+    if (result.firstPageMissing) throw pageMissing();
+    return { note };
+  };
+
 const projectListPost = (raw: unknown) => projectPost(raw, 'list');
 const projectListUser = (raw: unknown): User => projectUser(raw);
 
@@ -426,7 +451,7 @@ export async function getPostReposts(args: ToolArgs<'get_post_reposts'>, { sessi
     route: (up) => routes.reposts(postId, { cursor: up }),
     context: { postId },
     project: projectListUser,
-    onEmptyFirstPage: async () => ({ note: notes.noReposts }),
+    onEmptyFirstPage: emptyUnlessMissing(notes.noReposts),
     // Reposts of an unknown or deleted post answer HTTP 500; the post itself answers 404 (not_found).
     onFirstPageServerError: async () => {
       const outcome = await session.fetch(routes.status(postId), { postId });
@@ -453,7 +478,7 @@ export async function searchPosts(args: ToolArgs<'search_posts'>, { session }: T
     context: { q },
     project: projectListPost,
     tooLarge: tooLargePost,
-    onEmptyFirstPage: async () => ({ note: notes.noSearchResults })
+    onEmptyFirstPage: emptyUnlessMissing(notes.noSearchResults)
   });
 }
 

@@ -73,6 +73,17 @@ describe('get_post', () => {
     expect(result.text).not.toContain('\n');
   });
 
+  it('cuts a post only as far as one result needs', async () => {
+    // Line breaks double in JSON, so this 25,000-character post does not fit in one result as a whole.
+    const text = 'line\n'.repeat(5_000);
+    const fake = fakeUpstream(() => json({ ...status, status: { ...status.status, text } }));
+    const result = await call(await connect(fake.fetch), 'get_post', { id: '2000000000000000100' });
+
+    expect(result.text.length).toBeLessThanOrEqual(MAX_RESULT_CHARS);
+    expect(result.text.length).toBeGreaterThan(MAX_RESULT_CHARS - 1_000);
+    expect(result.data.post).toMatchObject({ text_truncated: true });
+  });
+
   it('returns the whole text of the longest post X allows', async () => {
     const text = `${'a'.repeat(24_999)}😀`.slice(0, 25_000);
     const fake = fakeUpstream(() => json({ ...status, status: { ...status.status, text } }));
@@ -631,6 +642,23 @@ describe('search_posts and typeahead', () => {
       topics: ['example topic']
     });
     expect((await call(client, 'search_posts', { q: '   ' })).data).toMatchObject({ code: 'invalid_argument', error: 'q is empty.' });
+  });
+
+  it('asks for a first search page once more when it answers "not found", instead of reporting no matches', async () => {
+    const env = { UPSTREAM_BASE_URL: 'https://upstream.test/api/fx', SEARCH_ENABLED: 'true' };
+    let calls = 0;
+    const flaky = fakeUpstream(() => (calls++ === 0 ? json(userNotFound, 404) : json(timelinePage({ size: 3 }))));
+    expect((await call(await connect(flaky.fetch, env), 'search_posts', { q: 'nasa' })).data).toMatchObject({ returned: 3 });
+    expect(flaky.urls).toHaveLength(2);
+
+    const failing = fakeUpstream(() => json(userNotFound, 404));
+    expect((await call(await connect(failing.fetch, env), 'search_posts', { q: 'nasa' })).data).toMatchObject({
+      code: 'upstream_unavailable',
+      retryable: true
+    });
+    const none = fakeUpstream(() => json({ code: 200, results: [], cursor: { bottom: 'X' } }));
+    expect((await call(await connect(none.fetch, env), 'search_posts', { q: 'nasa' })).data).toMatchObject({ note: 'No posts matched this query.' });
+    expect(none.urls).toHaveLength(1);
   });
 });
 
