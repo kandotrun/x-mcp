@@ -12,7 +12,7 @@ import { MAX_RESULT_CHARS } from '../src/contract/limits';
 import { TOOL_NAMES } from '../src/contract/tools';
 import { scopeKey } from '../src/domain/cursor';
 import { idKey } from '../src/domain/paginate';
-import { stripMosaic } from '../src/domain/project';
+import { projectPost, stripMosaic } from '../src/domain/project';
 import { itemBudgetFor } from '../src/tools/handlers';
 import { call, connect, fakeUpstream, json, timelinePage } from './helpers';
 import articles from './fixtures/articles.json';
@@ -99,6 +99,32 @@ describe('get_post', () => {
     const both = await call(await connect(fakeUpstream(() => json({ code: 200, status: article })).fetch), 'get_post', { id: '2000000000000000300' });
     expect(both.text.length).toBeLessThanOrEqual(MAX_RESULT_CHARS);
     expect(both.text.length).toBeGreaterThan(MAX_RESULT_CHARS - 50);
+  });
+
+  it('keeps the Article body whole whenever it fits, even though the size drops where a field stops being cut', async () => {
+    const budget = MAX_RESULT_CHARS - JSON.stringify({ post: 0 }).length + 1;
+    const withArticle = (length: number) => {
+      const raw = structuredClone(articles.results[0]) as Record<string, unknown>;
+      raw.text = 't'.repeat(25_000);
+      (raw.article as { content: { blocks: { type: string; text: string }[] } }).content.blocks = [{ type: 'unstyled', text: 'b'.repeat(length) }];
+      return raw;
+    };
+    const fitsAt = (length: number) => JSON.stringify(projectPost(withArticle(length), 'single', { textMax: length, articleMax: length })).length <= budget;
+    // The longest Article body that fits next to a post text cut to the same length.
+    let low = 1;
+    let high = 20_000;
+    while (low < high) {
+      const mid = Math.ceil((low + high) / 2);
+      if (fitsAt(mid)) low = mid;
+      else high = mid - 1;
+    }
+    for (let length = low - 15; length <= low + 5; length++) {
+      const raw = withArticle(length);
+      const result = await call(await connect(fakeUpstream(() => json({ code: 200, status: raw })).fetch), 'get_post', { id: '2000000000000000300' });
+      expect(result.text.length, `length ${length}`).toBeLessThanOrEqual(MAX_RESULT_CHARS);
+      const article = (result.data.post as { article: { text_truncated?: boolean } }).article;
+      if (fitsAt(length)) expect(article.text_truncated, `length ${length}`).toBeUndefined();
+    }
   });
 
   it('returns the whole text of the longest post X allows', async () => {

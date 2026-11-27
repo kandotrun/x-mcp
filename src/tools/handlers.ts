@@ -64,27 +64,36 @@ const singlePostBudget = (note?: string) => MAX_RESULT_CHARS - JSON.stringify(no
 
 /**
  * The whole post when it fits in one result. Otherwise the post text and the Article body are cut to the longest
- * common length that fits (a binary search, since JSON escaping makes characters cost 1 to 6), so the longer one is
- * cut first and nothing is cut further than needed.
+ * common length that fits, so the longer one is cut first and nothing is cut further than needed. JSON escaping makes
+ * a character cost 1 to 6, hence a search. The size grows with the length except where a field stops being cut (it
+ * loses its ellipsis and flag), so each stretch between those lengths is searched on its own, longest first.
  */
 function conciseSinglePost(raw: Rec, budget: number): PostItem {
   const inBudget = (post: PostItem) => JSON.stringify(post).length <= budget;
   const whole = projectPost(raw, 'single');
-  if (inBudget(whole)) return whole;
-  let low = 0;
-  let high = Math.max(POST_TEXT_MAX, ARTICLE_TEXT_MAX);
-  let best: PostItem | undefined;
-  while (low <= high) {
-    const cap = Math.floor((low + high) / 2);
-    const post = projectPost(raw, 'single', { textMax: cap, articleMax: cap });
-    if (inBudget(post)) {
-      best = post;
-      low = cap + 1;
-    } else {
-      high = cap - 1;
+  if (inBudget(whole) || !('text' in whole)) return whole;
+  const withCap = (cap: number) => projectPost(raw, 'single', { textMax: Math.min(cap, POST_TEXT_MAX), articleMax: Math.min(cap, ARTICLE_TEXT_MAX) });
+  const uncut = [whole.text_truncated ? 0 : [...whole.text].length];
+  if (whole.article?.text !== undefined && whole.article.text_truncated !== true) uncut.push([...whole.article.text].length);
+  let upper = Math.max(POST_TEXT_MAX, ARTICLE_TEXT_MAX);
+  for (const lower of [...new Set([...uncut, 0])].sort((a, b) => b - a)) {
+    let low = lower;
+    let high = upper;
+    let best: PostItem | undefined;
+    while (low <= high) {
+      const cap = Math.floor((low + high) / 2);
+      const post = withCap(cap);
+      if (inBudget(post)) {
+        best = post;
+        low = cap + 1;
+      } else {
+        high = cap - 1;
+      }
     }
+    if (best !== undefined) return best;
+    upper = lower - 1;
   }
-  return best ?? projectPost(raw, 'single', { textMax: 0, articleMax: 0 });
+  return withCap(0);
 }
 
 export async function getProfile(args: ToolArgs<'get_profile'>, { session }: ToolContext) {
