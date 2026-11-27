@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1280" height="640" viewBox="0 0 1280 640" role="img" aria-labelledby="title desc">
   <title id="title">x-mcp — public X/Twitter data, inside your AI agent</title>
-  <desc id="desc">An illustrated search_posts request passes from an AI agent through x-mcp to twitter.2-38.com. The sample arguments are q from:jack, feed latest and count 2. A second example shows get_profile with handle jack. This is a diagram, not a live result.</desc>
+  <desc id="desc">An illustrated get_profile_statuses request passes from an AI agent through x-mcp to twitter.2-38.com. The sample arguments are handle jack and count 2. A second example shows get_profile with handle jack. This is a diagram, not a live result.</desc>
   <defs>
     <linearGradient id="background" x1="0" y1="0" x2="1" y2="1">
       <stop stop-color="#0b1320"/>
@@ -20,14 +20,14 @@
     <text x="56" y="202" fill="#f7fafc" font-size="88" font-weight="750" letter-spacing="-4">x-mcp</text>
     <text x="58" y="279" fill="#f7fafc" font-size="44" font-weight="650" letter-spacing="-1.4">Public X data.</text>
     <text x="58" y="334" fill="#6ae6d3" font-size="44" font-weight="650" letter-spacing="-1.4">Inside your agent.</text>
-    <text x="58" y="386" fill="#b8c8d8" font-size="20">Posts, profiles and trends.</text>
+    <text x="58" y="386" fill="#b8c8d8" font-size="20">Posts, profiles, timelines and trends.</text>
     <text x="58" y="417" fill="#b8c8d8" font-size="20">One remote endpoint. No X login or API key.</text>
 
     <g font-size="13" font-weight="700" fill="#d2e3ee" text-anchor="middle">
       <rect x="58" y="452" width="111" height="32" rx="16" fill="#1e3446"/>
       <text x="113" y="473">READ-ONLY</text>
       <rect x="179" y="452" width="104" height="32" rx="16" fill="#1e3446"/>
-      <text x="231" y="473">8 TOOLS</text>
+      <text x="231" y="473">12 TOOLS</text>
       <rect x="293" y="452" width="171" height="32" rx="16" fill="#1e3446"/>
       <text x="378" y="473">STREAMABLE HTTP</text>
     </g>
@@ -42,13 +42,12 @@
     <circle cx="727" cy="83" r="5" fill="#38516a"/>
     <circle cx="746" cy="83" r="5" fill="#38516a"/>
     <text x="770" y="89" fill="#b8c8d8" font-size="14">AI AGENT → TOOL CALL</text>
-    <text x="718" y="162" fill="#6ae6d3" font-family="'SFMono-Regular', Consolas, monospace" font-size="28" font-weight="600">search_posts</text>
+    <text x="718" y="162" fill="#6ae6d3" font-family="'SFMono-Regular', Consolas, monospace" font-size="28" font-weight="600">get_profile_statuses</text>
     <g font-family="'SFMono-Regular', Consolas, monospace" font-size="23">
-      <text x="718" y="213" fill="#b8c8d8">{</text>
-      <text x="742" y="253" fill="#b8c8d8">"q": <tspan fill="#f7fafc">"from:jack"</tspan>,</text>
-      <text x="742" y="293" fill="#b8c8d8">"feed": <tspan fill="#f7fafc">"latest"</tspan>,</text>
-      <text x="742" y="333" fill="#b8c8d8">"count": <tspan fill="#f2c68f">2</tspan></text>
-      <text x="718" y="373" fill="#b8c8d8">}</text>
+      <text x="718" y="233" fill="#b8c8d8">{</text>
+      <text x="742" y="273" fill="#b8c8d8">"handle": <tspan fill="#f7fafc">"jack"</tspan>,</text>
+      <text x="742" y="313" fill="#b8c8d8">"count": <tspan fill="#f2c68f">2</tspan></text>
+      <text x="718" y="353" fill="#b8c8d8">}</text>
     </g>
 
     <rect x="682" y="450" width="138" height="42" rx="10" fill="#6ae6d3"/>

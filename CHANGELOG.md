@@ -1,0 +1,39 @@
+# Changelog
+
+All notable changes to this project are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project uses [Semantic Versioning](https://semver.org/).
+
+## [0.2.0] - 2026-11-27
+
+### Changed
+
+- **Breaking:** tool results are now compact, agent-friendly JSON by default instead of the raw upstream payload wrapped in `{upstreamUrl, status, data}`. Single objects return `{post}` or `{user}`; lists return `{posts | users, returned, has_more, next_cursor?, truncated?, note?}`. Pass `response_format: "detailed"` for the full upstream objects (with rendered collage URLs removed).
+- **Breaking:** errors are `{error, code, retryable, hint, retry_after_seconds?, upstream_status?}` and no longer include upstream bodies or URLs.
+- `count` is enforced by the server. Upstream pages ignore it (about 20 posts or 70 accounts per page), so 0.1 returned about 125,000 characters for `get_profile_statuses` with `count: 2`; 0.2 returns about 1,500. Every result stays under 30,000 characters.
+- `next_cursor` continues lossless pagination within and across upstream pages; 0.1 raw upstream cursors are still accepted.
+- `get_post` accepts post URLs (x.com, twitter.com, mobile, `/photo/1` and query suffixes); handles accept `@name` and profile or post URLs.
+- `search_posts` and `typeahead` fail fast with `feature_unavailable` and a concrete alternative while upstream search is disabled; their descriptions say so (`SEARCH_ENABLED` var).
+- `get_trends` clamps `count` to the upstream maximum of 50 instead of failing; `typeahead` applies `count` itself.
+- `get_openapi` is deprecated and returns a static endpoint summary.
+- Tool descriptions and server instructions explain when to use each tool, what it returns and how to paginate.
+- `GET` and `DELETE` on `/mcp` return 405 (the server is stateless); request bodies are limited to 64 KiB and tool arguments to 32 elements.
+- Upstream requests time out after 10 seconds including the body, read at most 2 MiB, do not follow redirects, and are capped at 3 per tool call.
+
+### Added
+
+- `get_profile_articles`, `get_profile_followers`, `get_profile_following` and `get_post_reposts` tools.
+- `include_replies` on `get_profile_statuses` and `include_about` on `get_profile`.
+- Setup instructions for Claude Code, claude.ai / Claude Desktop, Codex, Cursor, VS Code, Gemini CLI, Antigravity, Devin Desktop / Windsurf, Cline, Zed and Hermes Agent.
+- Tests (vitest), CI (GitHub Actions), Dependabot configuration, a `justfile` and an MCP smoke test (`scripts/smoke.ts`).
+
+### Security
+
+- Updated `@modelcontextprotocol/sdk` to 1.32.2 and enabled its request-size and input-element limits, `hono` to 4.13.22 and `zod` to 4.6.7, and refreshed transitive dependencies, which resolves the open Dependabot alerts.
+
+### Maintenance
+
+- Migrated from npm to pnpm 12 and from TypeScript 6 to 7; updated wrangler to 4.168.
+- Split the Worker into contract, domain, upstream and handler modules.
+
+## [0.1.0] - 2026-06-18
+
+- Initial release: read-only MCP server with `search_posts`, `get_post`, `get_profile`, `get_profile_statuses`, `get_profile_media`, `get_trends`, `typeahead` and `get_openapi`.
