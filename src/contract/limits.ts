@@ -1,6 +1,6 @@
 /** Size, time and request limits. Changing one of these changes the documented contract. */
 
-/** Every successful tool result stays under this many characters (Claude Code moves results over 50,000 to a file). */
+/** No successful tool result is longer than this many characters (Claude Code moves results over 50,000 to a file). */
 export const MAX_RESULT_CHARS = 30_000;
 /** Characters available for list items; the rest is reserved for the envelope and notes. */
 export const ITEM_BUDGET = 29_000;

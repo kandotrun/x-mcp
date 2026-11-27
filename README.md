@@ -235,7 +235,7 @@ Single objects return `{post}` or `{user}`. Lists return:
 {"posts":[...],"returned":2,"has_more":true,"next_cursor":"xc1...."}
 ```
 
-`users` replaces `posts` for account lists. While `has_more` is true, pass `next_cursor` back unchanged as `cursor` to continue. Cursors are bound to the tool and its arguments, and 0.1 raw upstream cursors still work. `note` explains short or empty results, and every result stays under 30,000 characters.
+`users` replaces `posts` for account lists. While `has_more` is true, pass `next_cursor` back unchanged as `cursor` to continue. Cursors are bound to the tool and its arguments, and 0.1 raw upstream cursors still work. `note` explains short or empty results, and no result exceeds 30,000 characters.
 
 Errors are tool results with `isError: true`:
 

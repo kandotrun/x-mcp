@@ -323,12 +323,14 @@ export const pageTooLarge = () =>
     hint: 'Use a larger count to read more of this page in fewer calls, or omit cursor to start again from the newest items.'
   });
 
-export const pageMissing = () =>
+export const pageMissing = (options: { firstPage?: boolean } = {}) =>
   new ToolError({
     code: 'upstream_unavailable',
     retryable: true,
     message: 'X did not return this page of the list (it answered "not found" or an empty page twice in a row); this is usually temporary.',
-    hint: 'Call again with the same cursor in a few seconds; nothing is skipped. If it keeps failing, omit cursor to start again from the newest items.'
+    hint: options.firstPage
+      ? 'Call again in a few seconds; if it keeps failing, try again later.'
+      : 'Call again with the same cursor in a few seconds; nothing is skipped. If it keeps failing, omit cursor to start again from the newest items.'
   });
 
 export const upstreamFailed = (status: number) =>
@@ -390,8 +392,9 @@ export const notes = {
   pageEnded: (returned: number, count: number) =>
     `Returned ${returned} of ${count} requested because the upstream page ended; pass next_cursor as cursor for more.`,
   budget: (returned: number, noun: string) =>
-    `Stopped at ${returned} ${noun} to keep this result under ${formatChars(MAX_RESULT_CHARS)} characters; pass next_cursor as cursor for the rest.`,
+    `Stopped at ${returned} ${noun} to keep this result within ${formatChars(MAX_RESULT_CHARS)} characters; pass next_cursor as cursor for the rest.`,
   noMore: (noun: string) => `No more ${noun}.`,
+  postTooLarge: 'This post is too large to return in one result; open it with its url.',
   cutShort: (noun: string) => `X offered more ${noun}, but with a cursor this server cannot pass on, so the list stops here.`,
   noSearchResults: 'No posts matched this query.',
   detailedTooLarge: `The detailed object exceeded ${formatChars(MAX_RESULT_CHARS)} characters, so the concise form is returned.`,

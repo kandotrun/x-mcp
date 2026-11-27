@@ -54,10 +54,13 @@ export async function getPost(args: ToolArgs<'get_post'>, { session }: ToolConte
   if (args.response_format === 'detailed') {
     const detailed = { post: stripMosaic(status) };
     if (fits(detailed, MAX_RESULT_CHARS)) return detailed;
-    return { post: conciseSinglePost(status, singlePostBudget(notes.detailedTooLarge)), note: notes.detailedTooLarge };
+    return withPostNote(conciseSinglePost(status, singlePostBudget(notes.detailedTooLarge)), notes.detailedTooLarge);
   }
-  return { post: conciseSinglePost(status, singlePostBudget()) };
+  return withPostNote(conciseSinglePost(status, singlePostBudget()));
 }
+
+const withPostNote = (post: PostItem, note?: string) =>
+  'unavailable' in post ? { post, note: notes.postTooLarge } : note === undefined ? { post } : { post, note };
 
 /** Characters left for the post in a {post, note?} result. */
 const singlePostBudget = (note?: string) => MAX_RESULT_CHARS - JSON.stringify(note === undefined ? { post: 0 } : { post: 0, note }).length + 1;
@@ -93,7 +96,8 @@ function conciseSinglePost(raw: Rec, budget: number): PostItem {
     if (best !== undefined) return best;
     upper = lower - 1;
   }
-  return withCap(0);
+  // Other fields alone are too large (only possible with input X does not produce): a small stand-in instead.
+  return tooLargePost(raw);
 }
 
 export async function getProfile(args: ToolArgs<'get_profile'>, { session }: ToolContext) {
@@ -350,7 +354,7 @@ const emptyUnlessMissing =
   async (retry, first) => {
     const result = first.firstPageMissing ? await retry() : first;
     if (result.items.length > 0 || result.hasMore) return result;
-    if (result.firstPageMissing) throw pageMissing();
+    if (result.firstPageMissing) throw pageMissing({ firstPage: true });
     return { note };
   };
 

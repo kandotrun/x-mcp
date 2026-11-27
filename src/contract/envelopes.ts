@@ -137,7 +137,7 @@ const listFields = {
 export const PostListSchema = z.strictObject({ posts: z.array(PostItemSchema), ...listFields });
 export const UserListSchema = z.strictObject({ users: z.array(UserSchema), ...listFields });
 
-export const PostResultSchema = z.strictObject({ post: PostSchema, note: z.string().optional() });
+export const PostResultSchema = z.strictObject({ post: PostItemSchema, note: z.string().optional() });
 export const UserResultSchema = z.strictObject({ user: UserSchema, note: z.string().optional() });
 export const TrendsResultSchema = z.strictObject({
   trends: z.array(TrendSchema),

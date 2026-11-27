@@ -235,7 +235,7 @@ mcp_servers:
 {"posts":[...],"returned":2,"has_more":true,"next_cursor":"xc1...."}
 ```
 
-アカウントの一覧では `posts` の代わりに `users` が入ります。`has_more` が true の間は、`next_cursor` をそのまま `cursor` に渡すと続きを取得できます。cursorは発行したツールと引数に結び付いており、0.1の生のupstream cursorも引き続き使えます。結果が少ないときや空のときは `note` で理由を伝え、結果は常に30,000文字未満です。
+アカウントの一覧では `posts` の代わりに `users` が入ります。`has_more` が true の間は、`next_cursor` をそのまま `cursor` に渡すと続きを取得できます。cursorは発行したツールと引数に結び付いており、0.1の生のupstream cursorも引き続き使えます。結果が少ないときや空のときは `note` で理由を伝え、結果が30,000文字を超えることはありません。
 
 エラーは `isError: true` のツール結果として返ります。
 

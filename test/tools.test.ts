@@ -127,6 +127,18 @@ describe('get_post', () => {
     }
   });
 
+  it('returns a small stand-in when a post does not fit in one result even without its text', async () => {
+    const huge = { ...status, status: { ...status.status, community_note: { text: 'n'.repeat(31_000) } } };
+    for (const format of ['concise', 'detailed']) {
+      const result = await call(await connect(fakeUpstream(() => json(huge)).fetch), 'get_post', { id: '2000000000000000100', response_format: format });
+      expect(result.text.length, format).toBeLessThanOrEqual(MAX_RESULT_CHARS);
+      expect(result.data, format).toEqual({
+        post: { id: '2000000000000000100', url: 'https://x.com/example_dev/status/2000000000000000100', unavailable: 'too_large' },
+        note: 'This post is too large to return in one result; open it with its url.'
+      });
+    }
+  });
+
   it('returns the whole text of the longest post X allows', async () => {
     // 25,000 code points: 24,999 letters and one emoji (a surrogate pair).
     const text = `${'a'.repeat(24_999)}😀`;
@@ -609,7 +621,7 @@ describe('get_profile_statuses', () => {
       response_format: 'detailed'
     });
     expect(result.data).toMatchObject({ returned: 1, truncated: true });
-    expect(result.data.note).toBe('Stopped at 1 posts to keep this result under 30,000 characters; pass next_cursor as cursor for the rest.');
+    expect(result.data.note).toBe('Stopped at 1 posts to keep this result within 30,000 characters; pass next_cursor as cursor for the rest.');
   });
 
   it('keeps detailed pages under the result budget', async () => {
@@ -622,7 +634,7 @@ describe('get_profile_statuses', () => {
     expect(page.posts[0]).toHaveProperty('raw_text');
     expect(page).toMatchObject({ truncated: true, has_more: true });
     expect(page.returned).toBeLessThan(20);
-    expect(page.note).toMatch(/^Stopped at \d+ posts to keep this result under 30,000 characters/);
+    expect(page.note).toMatch(/^Stopped at \d+ posts to keep this result within 30,000 characters/);
   });
 });
 
@@ -711,10 +723,10 @@ describe('search_posts and typeahead', () => {
     expect(flaky.urls).toHaveLength(2);
 
     const failing = fakeUpstream(() => json(userNotFound, 404));
-    expect((await call(await connect(failing.fetch, env), 'search_posts', { q: 'nasa' })).data).toMatchObject({
-      code: 'upstream_unavailable',
-      retryable: true
-    });
+    const failed = await call(await connect(failing.fetch, env), 'search_posts', { q: 'nasa' });
+    expect(failed.data).toMatchObject({ code: 'upstream_unavailable', retryable: true });
+    // A first page has no cursor to pass again.
+    expect(failed.data.hint).toBe('Call again in a few seconds; if it keeps failing, try again later.');
     const none = fakeUpstream(() => json({ code: 200, results: [], cursor: { bottom: 'X' } }));
     expect((await call(await connect(none.fetch, env), 'search_posts', { q: 'nasa' })).data).toMatchObject({ note: 'No posts matched this query.' });
     expect(none.urls).toHaveLength(1);

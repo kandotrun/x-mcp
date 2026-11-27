@@ -124,7 +124,7 @@ Single objects:
 - `get_post` → `{post}`; `get_profile` → `{user}`; optional fields appear only when present.
 - In timelines, a post with `reposted_by` is a repost: `author` is the original poster and `created_at` the original time.
 - `reply_to.post_id` can be passed to `get_post` to open the post being answered.
-- List text over 1,000 characters is cut and marked `text_truncated: true`; call `get_post` for the full text.
+- List text over 1,000 characters is cut and marked `text_truncated: true`; call `get_post` for the full text (it is cut the same way only if the post does not fit in one result).
 
 Lists:
 
