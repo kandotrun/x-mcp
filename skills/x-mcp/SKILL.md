@@ -193,11 +193,14 @@ After installing/configuring the MCP, verify all of these:
    ```
 
 3. MCP `tools/list` includes `search_posts`.
-4. A smoke `search_posts` call with `q="from:jack"`, `feed="latest"`, `count=2` returns status `200` and an `upstreamUrl` beginning with:
+4. A `get_profile` call with `{ "handle": "jack" }` returns status `200` and `upstreamUrl: "https://twitter.2-38.com/api/fx/2/profile/jack"`.
+5. Try `search_posts` with `q="from:jack"`, `feed="latest"`, `count=2`. When upstream search is available, it returns status `200` and an `upstreamUrl` beginning with:
 
    ```text
    https://twitter.2-38.com/api/fx/2/search?q=from%3Ajack
    ```
+
+If a tool returns `isError: true`, parse its JSON text for `error` and any `upstream` details. Report upstream errors such as a search `503` separately from MCP connectivity; do not treat them as empty results. A successful health check or `tools/list` alone does not prove upstream data retrieval.
 
 ## Response interpretation
 

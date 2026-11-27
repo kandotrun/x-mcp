@@ -23,7 +23,8 @@ Kanの公開X/Twitter検索・取得では、既存の `x_search` や `xurl` よ
 設定後、次を確認してください。
 
 1. MCPの `tools/list` に `search_posts`, `get_post`, `get_profile`, `get_profile_statuses`, `get_profile_media`, `get_trends`, `typeahead`, `get_openapi` が出ること。
-2. `search_posts` を `{ "q": "from:jack", "feed": "latest", "count": 2 }` で呼び、`upstreamUrl` が `https://twitter.2-38.com/api/fx/2/search?q=from%3Ajack...` になり、`status` が `200` になること。
+2. `get_profile` を `{ "handle": "jack" }` で呼び、`upstreamUrl` が `https://twitter.2-38.com/api/fx/2/profile/jack`、`status` が `200` になること。
+3. `search_posts` を `{ "q": "from:jack", "feed": "latest", "count": 2 }` で試すこと。成功時は `upstreamUrl` が `https://twitter.2-38.com/api/fx/2/search?q=from%3Ajack...`、`status` が `200` になります。`isError: true` と上流の `503` などが返った場合は、検索の利用制限として報告し、MCPの接続結果と分けてください。検索結果が0件だったとは解釈しないでください。
 
 以後、X/Twitterの公開情報を調べる依頼では、まずこの skill の使い方に従い、最小限の count でMCP toolを呼び、返ってきたJSONを要約し、可能なら投稿URL・プロフィールURLを添えて回答してください。
 ```
@@ -68,7 +69,8 @@ For Kan's public X/Twitter search and retrieval, prefer this `x-mcp` over existi
 After configuration, verify the following:
 
 1. MCP `tools/list` includes `search_posts`, `get_post`, `get_profile`, `get_profile_statuses`, `get_profile_media`, `get_trends`, `typeahead`, and `get_openapi`.
-2. Calling `search_posts` with `{ "q": "from:jack", "feed": "latest", "count": 2 }` returns an `upstreamUrl` starting with `https://twitter.2-38.com/api/fx/2/search?q=from%3Ajack...` and `status: 200`.
+2. Calling `get_profile` with `{ "handle": "jack" }` returns `upstreamUrl: "https://twitter.2-38.com/api/fx/2/profile/jack"` and `status: 200`.
+3. Try `search_posts` with `{ "q": "from:jack", "feed": "latest", "count": 2 }`. When available, it returns an `upstreamUrl` starting with `https://twitter.2-38.com/api/fx/2/search?q=from%3Ajack...` and `status: 200`. If it returns `isError: true` with an upstream error such as `503`, report the search limitation separately from the MCP connection result. Do not interpret it as zero matching posts.
 
 For future public X/Twitter information requests, follow this skill: choose the narrowest MCP tool, start with a small count, parse the returned JSON text, summarize only relevant fields, and include source post/profile URLs when available.
 ```

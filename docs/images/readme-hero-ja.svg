@@ -1,0 +1,63 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="640" viewBox="0 0 1280 640" role="img" aria-labelledby="title desc">
+  <title id="title">x-mcp — X/Twitterの公開情報を、AIエージェントから</title>
+  <desc id="desc">AIエージェントがsearch_postsを呼び、x-mcpを経由してtwitter.2-38.comにリクエストする概念図。引数の例はqがfrom:jack、feedがlatest、countが2。get_profileにhandle jackを渡す例も示す。実際の取得結果ではない。</desc>
+  <defs>
+    <linearGradient id="background" x1="0" y1="0" x2="1" y2="1">
+      <stop stop-color="#0b1320"/>
+      <stop offset="1" stop-color="#142638"/>
+    </linearGradient>
+    <pattern id="dots" width="24" height="24" patternUnits="userSpaceOnUse">
+      <circle cx="12" cy="12" r="1" fill="#52647b" opacity=".19"/>
+    </pattern>
+  </defs>
+  <rect width="1280" height="640" rx="28" fill="url(#background)"/>
+  <rect width="1280" height="640" rx="28" fill="url(#dots)"/>
+  <g font-family="'Hiragino Sans', 'Noto Sans JP', 'Yu Gothic', sans-serif">
+    <rect x="56" y="54" width="48" height="48" rx="14" fill="#6ae6d3"/>
+    <path d="M69 70l9 8-9 8m13 0h10" fill="none" stroke="#102536" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/>
+    <text x="120" y="83" fill="#a8c1d4" font-size="14" font-weight="700" letter-spacing="2">公開 X / TWITTER · MCP</text>
+
+    <text x="56" y="202" fill="#f7fafc" font-size="88" font-weight="750" letter-spacing="-4">x-mcp</text>
+    <text x="58" y="279" fill="#f7fafc" font-size="38" font-weight="650" letter-spacing="-1">Xの公開情報を、</text>
+    <text x="58" y="334" fill="#6ae6d3" font-size="38" font-weight="650" letter-spacing="-1">AIエージェントから。</text>
+    <text x="58" y="386" fill="#b8c8d8" font-size="20">投稿・プロフィール・トレンドを取得。</text>
+    <text x="58" y="417" fill="#b8c8d8" font-size="20">Xへのログインも、APIキーも不要。</text>
+
+    <g font-size="13" font-weight="700" fill="#d2e3ee" text-anchor="middle">
+      <rect x="58" y="452" width="111" height="32" rx="16" fill="#1e3446"/>
+      <text x="113" y="473">読み取り専用</text>
+      <rect x="179" y="452" width="104" height="32" rx="16" fill="#1e3446"/>
+      <text x="231" y="473">8つのツール</text>
+      <rect x="293" y="452" width="171" height="32" rx="16" fill="#1e3446"/>
+      <text x="378" y="473">STREAMABLE HTTP</text>
+    </g>
+
+    <rect x="56" y="516" width="559" height="54" rx="12" fill="#0c1724" stroke="#344b61"/>
+    <circle cx="81" cy="543" r="5" fill="#6ae6d3"/>
+    <text x="100" y="550" fill="#e5f3fa" font-family="'SFMono-Regular', Consolas, monospace" font-size="19">https://x.mcp.2-38.com/mcp</text>
+
+    <rect x="682" y="54" width="542" height="376" rx="18" fill="#0a1420" stroke="#38516a"/>
+    <path d="M683 112h540" stroke="#294055"/>
+    <circle cx="708" cy="83" r="5" fill="#6ae6d3"/>
+    <circle cx="727" cy="83" r="5" fill="#38516a"/>
+    <circle cx="746" cy="83" r="5" fill="#38516a"/>
+    <text x="770" y="89" fill="#b8c8d8" font-size="14">AIエージェント → ツール呼び出し</text>
+    <text x="718" y="162" fill="#6ae6d3" font-family="'SFMono-Regular', Consolas, monospace" font-size="28" font-weight="600">search_posts</text>
+    <g font-family="'SFMono-Regular', Consolas, monospace" font-size="23">
+      <text x="718" y="213" fill="#b8c8d8">{</text>
+      <text x="742" y="253" fill="#b8c8d8">"q": <tspan fill="#f7fafc">"from:jack"</tspan>,</text>
+      <text x="742" y="293" fill="#b8c8d8">"feed": <tspan fill="#f7fafc">"latest"</tspan>,</text>
+      <text x="742" y="333" fill="#b8c8d8">"count": <tspan fill="#f2c68f">2</tspan></text>
+      <text x="718" y="373" fill="#b8c8d8">}</text>
+    </g>
+
+    <rect x="682" y="450" width="138" height="42" rx="10" fill="#6ae6d3"/>
+    <text x="751" y="477" text-anchor="middle" fill="#102536" font-size="18" font-weight="700">x-mcp</text>
+    <path d="M832 471h63m-7-6 7 6-7 6" stroke="#6ae6d3" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+    <text x="913" y="477" fill="#d2e3ee" font-family="'SFMono-Regular', Consolas, monospace" font-size="19">twitter.2-38.com</text>
+
+    <rect x="682" y="516" width="542" height="54" rx="12" fill="#213c4b" stroke="#456273"/>
+    <text x="702" y="550" fill="#d9fff6" font-family="'SFMono-Regular', Consolas, monospace" font-size="18">get_profile({ handle: "jack" })</text>
+    <text x="58" y="608" fill="#9cb0c4" font-size="13">リクエストの流れを示す概念図です。コードは引数の例で、実際の取得結果ではありません。</text>
+  </g>
+</svg>
