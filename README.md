@@ -1,81 +1,56 @@
+<div align="center">
+
+<img src="docs/images/readme-hero.svg" width="100%" alt="x-mcp connects an AI agent to public X/Twitter data. An example search_posts call with q from:jack, feed latest and count 2 travels through x-mcp to twitter.2-38.com. A separate get_profile call illustrates looking up a public profile. This is a request-flow illustration, not a screenshot or live result.">
+
 # x-mcp
 
-Read-only MCP server for public X/Twitter search and retrieval via `twitter.2-38.com`. Implemented as a TypeScript + Hono Cloudflare Worker.
+**Public X/Twitter data, inside your AI agent.**<br>Look up posts, profiles and trends through one read-only MCP endpoint.<br>No X login, API key or local server needed to use the hosted endpoint.
 
-日本語版は下にあります: [日本語](#日本語)
+[![MCP: Streamable HTTP](https://img.shields.io/badge/MCP-Streamable%20HTTP-167D9A?labelColor=111827)](#quick-start) [![Scope: read-only](https://img.shields.io/badge/scope-read--only-167D9A?labelColor=111827)](#scope-and-limits) [![Auth: none](https://img.shields.io/badge/auth-none-167D9A?labelColor=111827)](#quick-start) [![Cloudflare Workers](https://img.shields.io/badge/Cloudflare-Workers-F38020?logo=cloudflare&logoColor=white&labelColor=111827)](#how-it-works) [![License: MIT](https://img.shields.io/badge/license-MIT-167D9A?labelColor=111827)](LICENSE)
 
-## Remote MCP endpoint
+**[Quick start](#quick-start)**&emsp;**[Features](#features)**&emsp;**[Tools](#tools)**&emsp;[Development](#development)&emsp;[日本語で読む](README.ja.md)
 
-```text
-https://x.mcp.2-38.com/mcp
-```
+</div>
 
-Discovery metadata:
+> [!NOTE]
+> **Upstream search/suggestion limitation, checked November 27, 2026:** `search_posts` and `typeahead` returned `503` with “X/Twitter search is unavailable due to current API limitations.” MCP discovery, `get_profile`, `get_trends` and `get_openapi` succeeded in the same check. Tool registration does not guarantee upstream data availability.
 
-```text
-https://x.mcp.2-38.com/.well-known/mcp.json
-```
+## Features
 
-This server exposes MCP tools that call the existing public proxy endpoints under:
+- 🔎 **Find public posts** — Search by keyword, hashtag or X search syntax such as `from:jack`, with `latest` and `top` feeds when upstream search is available.
+- 👤 **Look up a profile or post** — Fetch a public profile by handle, a post by numeric ID, or a profile's recent posts and media posts.
+- 📈 **Explore trends and suggestions** — Request trends, or typeahead suggestions when available upstream, without opening a separate app.
+- 🔌 **Connect a remote MCP client** — Use the hosted Streamable HTTP endpoint, or run the TypeScript + Hono Worker yourself.
+- 🧭 **Give your agent a usage guide** — The bundled [skill](skills/x-mcp/SKILL.md) explains tool selection, small result counts, pagination and source links.
 
-```text
-https://twitter.2-38.com/api/fx/2/...
-```
+## Quick start
 
-Example upstream call wrapped by `search_posts`:
+You need an AI agent or MCP client that supports **remote Streamable HTTP**. Using the hosted endpoint requires no Cloudflare account or repository clone.
 
-```text
-https://twitter.2-38.com/api/fx/2/search?q=from%3Ajack&feed=latest&count=10
-```
+### 1. Load the skill and connect
 
-## AI agent skill first
-
-MCP tells an agent what tools exist, but a skill tells it **when and how to use them**. Before asking an AI agent to use this MCP, have it install or load the bundled skill:
+Paste this into an agent that can load skills and configure MCP servers:
 
 ```text
-https://raw.githubusercontent.com/kandotrun/x-mcp/main/skills/x-mcp/SKILL.md
-```
-
-Full copy/paste prompts are available here:
-
-- [`docs/agent-install-prompts.md`](docs/agent-install-prompts.md)
-
-Short English prompt:
-
-```text
-Install or load this x-mcp skill first:
+Install or load the x-mcp skill first:
 https://raw.githubusercontent.com/kandotrun/x-mcp/main/skills/x-mcp/SKILL.md
 
-Then configure MCP server `x` with:
+Then configure an MCP server named `x` with Streamable HTTP:
 https://x.mcp.2-38.com/mcp
 
-Verify tools/list includes search_posts and call search_posts with
-{ "q": "from:jack", "feed": "latest", "count": 2 }.
-Use this instead of x_search/xurl for public read-only X/Twitter search and retrieval through twitter.2-38.com.
+Verify tools/list includes all eight tools documented in the skill.
+Call get_profile with { "handle": "jack" } and check for status: 200.
+Then try search_posts with { "q": "from:jack", "feed": "latest", "count": 2 }.
+If a tool returns an upstream error, report it separately from MCP setup.
+Use this MCP for public, read-only X/Twitter lookups.
 ```
 
-## MCP configuration
+Longer prompts in both languages are in [Agent install prompts](docs/agent-install-prompts.md).
 
-### Hermes Agent
+<details>
+<summary><b>Configure a client manually</b></summary>
 
-```bash
-hermes skills inspect https://raw.githubusercontent.com/kandotrun/x-mcp/main/skills/x-mcp/SKILL.md
-hermes skills install https://raw.githubusercontent.com/kandotrun/x-mcp/main/skills/x-mcp/SKILL.md --category social-media -y
-hermes mcp add x --url https://x.mcp.2-38.com/mcp
-hermes mcp test x
-```
-
-Or add this to `~/.hermes/config.yaml` and restart Hermes / start a new session:
-
-```yaml
-mcp_servers:
-  x:
-    url: "https://x.mcp.2-38.com/mcp"
-```
-
-Hermes will expose tools with the `mcp_x_` prefix, for example `mcp_x_search_posts`.
-
-### Generic MCP clients
+For clients that use `mcpServers`, start with:
 
 ```json
 {
@@ -87,139 +62,21 @@ Hermes will expose tools with the `mcp_x_` prefix, for example `mcp_x_search_pos
 }
 ```
 
-Use your client's HTTP / Streamable HTTP MCP transport setting if it requires an explicit transport type.
+Some clients use `servers` instead, or require an explicit transport/type field. Select **HTTP / Streamable HTTP**, with no authentication, and keep the same URL.
 
-## Tools
+</details>
 
-- `search_posts` — call `/2/search`
-- `get_post` — call `/2/status/:id`
-- `get_profile` — call `/2/profile/:handle`
-- `get_profile_statuses` — call `/2/profile/:handle/statuses`
-- `get_profile_media` — call `/2/profile/:handle/media`
-- `get_trends` — call `/2/trends`
-- `typeahead` — call `/2/typeahead`
-- `get_openapi` — call `/2/openapi.json`
+<details>
+<summary><b>Use Hermes Agent</b></summary>
 
-## Smoke test
-
-```bash
-curl -sS https://x.mcp.2-38.com/health
-curl -sS https://x.mcp.2-38.com/.well-known/mcp.json
-```
-
-For an MCP-level smoke test, call `tools/list` and then `search_posts` using your MCP client. A successful `search_posts` call with `q=from:jack` returns JSON text containing:
-
-```json
-{
-  "upstreamUrl": "https://twitter.2-38.com/api/fx/2/search?q=from%3Ajack&feed=latest&count=2",
-  "status": 200
-}
-```
-
-## Local development
-
-```bash
-npm install
-cp wrangler.example.jsonc wrangler.jsonc
-npm run check
-npx wrangler dev --config wrangler.jsonc
-```
-
-`npm run check` regenerates local Worker runtime types from `wrangler.example.jsonc` and runs TypeScript type checking.
-
-MCP endpoint locally:
-
-```text
-http://localhost:8787/mcp
-```
-
-## Deploy
-
-```bash
-cp wrangler.example.jsonc wrangler.jsonc
-# Fill account_id in wrangler.jsonc if needed.
-npm run deploy
-```
-
-`wrangler.jsonc` is intentionally gitignored so account-specific deployment config stays local.
-
-## Security and scope
-
-- Public, unauthenticated, read-only MCP endpoint.
-- Do not include secrets, private data, or access tokens in search queries.
-- Not for posting, liking, reposting, following, DMs, notifications, private accounts, or authenticated timelines.
-- Upstream availability, rate limits, and response shape depend on `twitter.2-38.com`.
-
----
-
-# 日本語
-
-`twitter.2-38.com` 経由で公開X/Twitter情報を read-only で検索・取得する MCP server です。実装は TypeScript + Hono の Cloudflare Worker です。
-
-## 公開MCP endpoint
-
-```text
-https://x.mcp.2-38.com/mcp
-```
-
-Discovery metadata:
-
-```text
-https://x.mcp.2-38.com/.well-known/mcp.json
-```
-
-このMCPは、既存の公開proxy endpointを呼びます。
-
-```text
-https://twitter.2-38.com/api/fx/2/...
-```
-
-`search_posts` が包む upstream 呼び出し例:
-
-```text
-https://twitter.2-38.com/api/fx/2/search?q=from%3Ajack&feed=latest&count=10
-```
-
-## まずAIエージェントにskillを入れる
-
-MCPだけだと「どの場面で、どう使うべきか」がAIに伝わりにくいので、このrepoにはAIエージェント向けskillを同梱しています。
-
-Skill URL:
-
-```text
-https://raw.githubusercontent.com/kandotrun/x-mcp/main/skills/x-mcp/SKILL.md
-```
-
-コピペ用の導入プロンプトはこちらです。
-
-- [`docs/agent-install-prompts.md`](docs/agent-install-prompts.md)
-
-短い日本語プロンプト:
-
-```text
-まず以下の x-mcp skill をインストール、または読み込んでください。
-https://raw.githubusercontent.com/kandotrun/x-mcp/main/skills/x-mcp/SKILL.md
-
-その後、MCP server `x` を以下で設定してください。
-https://x.mcp.2-38.com/mcp
-
-`tools/list` に `search_posts` が出ることを確認し、
-`search_posts` を { "q": "from:jack", "feed": "latest", "count": 2 } で試してください。
-このMCPは twitter.2-38.com 経由の公開X/Twitter情報取得専用です。公開read-only用途では x_search/xurl ではなくこのMCPを使ってください。
-```
-
-## MCP設定
-
-### Hermes Agent
-
-```bash
+```sh
 hermes skills inspect https://raw.githubusercontent.com/kandotrun/x-mcp/main/skills/x-mcp/SKILL.md
 hermes skills install https://raw.githubusercontent.com/kandotrun/x-mcp/main/skills/x-mcp/SKILL.md --category social-media -y
 hermes mcp add x --url https://x.mcp.2-38.com/mcp
 hermes mcp test x
 ```
 
-CLIが使えない場合は、`~/.hermes/config.yaml` に次を追加してHermesを再起動、または新しいセッションを開始してください。
+Or add this entry to `~/.hermes/config.yaml`:
 
 ```yaml
 mcp_servers:
@@ -227,79 +84,119 @@ mcp_servers:
     url: "https://x.mcp.2-38.com/mcp"
 ```
 
-Hermesでは `mcp_x_search_posts` のように `mcp_x_` prefix付きでtoolが見えます。
+Restart Hermes or start a new session after changing configuration. Hermes prefixes tool names with `mcp_x_`, for example `mcp_x_search_posts`.
 
-### 汎用MCP client
+</details>
+
+### 2. Try a lookup
+
+Ask your connected agent:
+
+> Look up `@jack`'s public X profile and include a link to the profile.
+
+The corresponding tool call is `get_profile` with:
+
+```json
+{ "handle": "jack" }
+```
+
+Tool results contain **JSON serialized as MCP text content**. A successful profile response includes the following fields, plus `data` containing the upstream response:
 
 ```json
 {
-  "mcpServers": {
-    "x": {
-      "url": "https://x.mcp.2-38.com/mcp"
-    }
-  }
-}
-```
-
-client側でtransport指定が必要な場合は、HTTP / Streamable HTTP MCP transportを選んでください。
-
-## Tools
-
-- `search_posts` — `/2/search` を呼ぶ
-- `get_post` — `/2/status/:id` を呼ぶ
-- `get_profile` — `/2/profile/:handle` を呼ぶ
-- `get_profile_statuses` — `/2/profile/:handle/statuses` を呼ぶ
-- `get_profile_media` — `/2/profile/:handle/media` を呼ぶ
-- `get_trends` — `/2/trends` を呼ぶ
-- `typeahead` — `/2/typeahead` を呼ぶ
-- `get_openapi` — `/2/openapi.json` を呼ぶ
-
-## Smoke test
-
-```bash
-curl -sS https://x.mcp.2-38.com/health
-curl -sS https://x.mcp.2-38.com/.well-known/mcp.json
-```
-
-MCPレベルでは、clientから `tools/list` → `search_posts` を確認してください。`q=from:jack` の成功例では、返ってくるJSON textに次のような内容が含まれます。
-
-```json
-{
-  "upstreamUrl": "https://twitter.2-38.com/api/fx/2/search?q=from%3Ajack&feed=latest&count=2",
+  "upstreamUrl": "https://twitter.2-38.com/api/fx/2/profile/jack",
   "status": 200
 }
 ```
 
-## ローカル開発
+For search, try `search_posts` with `{ "q": "from:jack", "feed": "latest", "count": 2 }`. An upstream failure returns an MCP tool result with `isError: true`; its JSON text includes `error` and may include `upstream` details. Report that failure instead of treating it as an empty set of posts.
 
-```bash
-npm install
+## Tools
+
+Choose the narrowest tool for the question. These are **tool arguments**, not raw HTTP requests.
+
+| You want to… | Tool | Example arguments |
+| --- | --- | --- |
+| Search public posts | `search_posts` | `{ "q": "from:jack", "feed": "latest", "count": 2 }` |
+| Fetch a known post | `get_post` | `{ "id": "2067319680654594543" }` |
+| Look up a public profile | `get_profile` | `{ "handle": "jack" }` |
+| Read a profile's recent posts | `get_profile_statuses` | `{ "handle": "jack", "count": 5 }` |
+| Read a profile's media posts | `get_profile_media` | `{ "handle": "jack", "count": 5 }` |
+| See trends | `get_trends` | `{ "count": 5 }` |
+| Get account/query suggestions | `typeahead` | `{ "q": "jack", "count": 5 }` |
+| Inspect the upstream API schema | `get_openapi` | `{}` |
+
+Where supported, `count` accepts **1–100** and defaults to **10**. `search_posts` defaults to `feed: "latest"`; use `"top"` for the top feed. Search, profile-post and profile-media tools accept an optional `cursor` from a previous response. Handles may include or omit `@`.
+
+## How it works
+
+```mermaid
+flowchart LR
+    agent["AI agent / MCP client"] -->|Streamable HTTP| worker["x-mcp · Hono Worker"]
+    worker -->|Public GET requests| proxy["twitter.2-38.com/api/fx/2/…"]
+    proxy -->|Upstream response| worker
+    worker -->|JSON in MCP text content| agent
+```
+
+The Worker exposes eight read-only tools through the MCP TypeScript SDK. It calls the existing public proxy at `https://twitter.2-38.com/api/fx`; it does not connect to your X account.
+
+| Endpoint | Purpose |
+| --- | --- |
+| [`/mcp`](https://x.mcp.2-38.com/mcp) | Streamable HTTP MCP endpoint for clients |
+| [`/.well-known/mcp.json`](https://x.mcp.2-38.com/.well-known/mcp.json) | Discovery metadata and tool names |
+| [`/health`](https://x.mcp.2-38.com/health) | Worker health and configured upstream base; does not test upstream availability |
+
+## Scope and limits
+
+- **Public and read-only.** No posting, liking, reposting, following, DMs, notifications, private accounts or authenticated timelines.
+- **Queries leave your client.** They are sent to this public Worker and `twitter.2-38.com`. Keep secrets, private data and access tokens out of tool arguments.
+- **Upstream-dependent data.** Availability, rate limits and response shape depend on `twitter.2-38.com`. A connected MCP server can still return upstream errors.
+- **Client-dependent setup.** Configuration keys and skill installation differ by client. The URL and Streamable HTTP transport remain the same.
+
+## Development
+
+For working on the Worker, you need **Node.js 22 or later** and npm. From a fresh clone:
+
+```sh
+git clone https://github.com/kandotrun/x-mcp.git
+cd x-mcp
+npm ci
 cp wrangler.example.jsonc wrangler.jsonc
 npm run check
+npm run deploy:dry
 npx wrangler dev --config wrangler.jsonc
 ```
 
-`npm run check` は `wrangler.example.jsonc` からローカルのWorker runtime型を再生成し、TypeScriptの型チェックを実行します。
+The local MCP endpoint is `http://localhost:8787/mcp`. `npm run check` regenerates local Worker runtime types from `wrangler.example.jsonc` and runs TypeScript checking. `npm run deploy:dry` bundles the Worker without deploying it.
 
-ローカルMCP endpoint:
+| Path | Contents |
+| --- | --- |
+| [`src/worker.ts`](src/worker.ts) | Hono routes, MCP tools, upstream requests and error handling |
+| [`skills/x-mcp/SKILL.md`](skills/x-mcp/SKILL.md) | Agent installation, configuration and usage guide |
+| [`docs/agent-install-prompts.md`](docs/agent-install-prompts.md) | English and Japanese copy/paste prompts |
+| [`wrangler.example.jsonc`](wrangler.example.jsonc) | Deployment template with a placeholder account ID |
 
-```text
-http://localhost:8787/mcp
-```
+### Deploy your own Worker
 
-## デプロイ
+After copying the example config, set your Cloudflare account ID and **your own route/domain** in `wrangler.jsonc`, then run:
 
-```bash
-cp wrangler.example.jsonc wrangler.jsonc
-# 必要に応じて wrangler.jsonc の account_id を埋める
+```sh
 npm run deploy
 ```
 
-`wrangler.jsonc` はアカウント固有の設定なのでgitignoreしています。
+`wrangler.jsonc` is gitignored. Keep account-specific configuration, `.dev.vars`, `.env*`, tokens and API keys out of Git.
 
-## セキュリティと範囲
+### Verify a deployment
 
-- 公開・認証なし・read-only のMCP endpointです。
-- search query に secret / private data / access token を入れないでください。
-- 投稿、いいね、RT、フォロー、DM、通知、private account、認証timelineには使えません。
-- upstreamの可用性、rate limit、response shapeは `twitter.2-38.com` 側に依存します。
+For the hosted instance (replace the host for your own deployment):
+
+```sh
+curl -fsS https://x.mcp.2-38.com/health
+curl -fsS https://x.mcp.2-38.com/.well-known/mcp.json
+```
+
+Then use an MCP client to run `tools/list`, `get_profile` with `{ "handle": "jack" }`, and `search_posts` with `{ "q": "from:jack", "feed": "latest", "count": 2 }`. Check tool results as well as HTTP status: a tool error can arrive inside a successful MCP HTTP response. A working health/discovery endpoint alone does not prove data retrieval.
+
+## License
+
+[MIT](LICENSE)
