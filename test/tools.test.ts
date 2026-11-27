@@ -441,6 +441,19 @@ describe('get_profile_statuses', () => {
       code: 'upstream_unavailable',
       retryable: true
     });
+
+    // An empty list shows that the account exists, so a "not found" profile is a transient failure.
+    const emptyList = () => json({ code: 200, results: [], cursor: { bottom: 'X' } });
+    let profileCalls = 0;
+    const flakyProfile = (user: Record<string, unknown>) =>
+      fakeUpstream((url) => (/\/(articles|statuses)$/.test(url.pathname) ? emptyList() : profileCalls++ % 2 === 0 ? json(userNotFound, 404) : json({ ...profile, user: { ...profile.user, ...user } })));
+    expect((await call(await connect(flakyProfile({}).fetch), 'get_profile_articles', { handle: 'example_dev' })).data).toMatchObject({
+      note: '@example_dev has no Articles.'
+    });
+    profileCalls = 0;
+    const quiet = flakyProfile({ statuses: 0 });
+    expect((await call(await connect(quiet.fetch), 'get_profile_statuses', { handle: 'quiet' })).data).toMatchObject({ note: '@quiet has no posts.' });
+    expect(quiet.urls).toHaveLength(3);
   });
 
   it('treats an empty default timeline of an account with only replies as a success with a hint', async () => {
@@ -457,7 +470,8 @@ describe('get_profile_statuses', () => {
       has_more: false,
       note: 'X returned no posts without replies for @replier, although its profile lists 7 posts; try include_replies=true.'
     });
-    expect(fake.urls).toHaveLength(3);
+    // An empty list is the upstream's answer, so only the profile is asked.
+    expect(fake.urls).toHaveLength(2);
 
     // "Not found" twice is an upstream failure, not an empty timeline.
     const flaky = fakeUpstream((url) => (url.pathname.endsWith('/statuses') ? json(userNotFound, 404) : json({ ...profile, user: { ...profile.user, statuses: 7 } })));

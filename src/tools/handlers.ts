@@ -224,8 +224,10 @@ function listEnvelope(
 }
 
 /**
- * U11: an empty first page (or a 404) is identical for an unknown account, a suspended or protected one, a truly
- * empty one and a transient upstream failure. One profile lookup tells them apart; one retry covers the transient case.
+ * U11: an empty first page tells nothing on its own. An empty list (HTTP 200) shows that the account exists and that
+ * the upstream has nothing to list; a "not found" is an unknown or suspended account, or a transient failure (the
+ * upstream answers about one request in four that way). A profile lookup tells these apart, protected accounts
+ * included, and one retry covers the transient case. Every path stays within 3 upstream requests.
  */
 function diagnoseAccount(
   session: UpstreamSession,
@@ -238,7 +240,27 @@ function diagnoseAccount(
     listedButEmptyNote?: (listed: number) => string;
   }
 ): EmptyFirstPage {
+  const count = (user: Rec) => (options.counter === undefined ? undefined : num(user[options.counter]));
+  // Why a list that came back empty (or "not found", when missing is true) is empty.
+  const explain = (listed: number | undefined, missing: boolean) => {
+    if (listed === 0 || (listed === undefined && !missing)) return { note: options.emptyNote };
+    // Only an empty list shows that the listing excludes everything the counter counts.
+    if (listed !== undefined && !missing && options.listedButEmptyNote !== undefined) return { note: options.listedButEmptyNote(listed) };
+    throw timelineMissing(handle, options.what, listed);
+  };
   return async (retry, first) => {
+    if (!first.firstPageMissing) {
+      // The account exists. The profile still reports protected accounts and gives the count; without a count, the
+      // empty list already answers the question, so a "not found" profile does not matter.
+      let user: Rec;
+      try {
+        user = await lookUpAccount(session, handle, options.counter !== undefined);
+      } catch (error) {
+        if (options.counter === undefined && error instanceof ToolError && error.code === 'not_found') return { note: options.emptyNote };
+        throw error;
+      }
+      return explain(count(user), false);
+    }
     let user: Rec;
     try {
       user = await lookUpAccount(session, handle);
@@ -247,20 +269,13 @@ function diagnoseAccount(
       if (!(error instanceof ToolError) || error.code !== 'not_found') throw error;
       const retried = await retry();
       if (retried.items.length > 0 || retried.hasMore) return retried;
+      if (options.counter === undefined && !retried.firstPageMissing) return { note: options.emptyNote };
       throw error;
     }
-    const listed = options.counter === undefined ? undefined : num(user[options.counter]);
-    if (listed === 0) return { note: options.emptyNote };
-    // Without a count, an empty list (not a "not found") is the upstream saying that there is nothing.
-    if (listed === undefined && !first.firstPageMissing) return { note: options.emptyNote };
+    if (count(user) === 0) return explain(0, true);
     const retried = await retry();
     if (retried.items.length > 0 || retried.hasMore) return retried;
-    // Only an empty list shows that the listing really is empty, or excludes everything the counter counts.
-    if (!retried.firstPageMissing) {
-      if (listed === undefined) return { note: options.emptyNote };
-      if (options.listedButEmptyNote !== undefined) return { note: options.listedButEmptyNote(listed) };
-    }
-    throw timelineMissing(handle, options.what, listed);
+    return explain(count(user), retried.firstPageMissing);
   };
 }
 
