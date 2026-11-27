@@ -249,11 +249,14 @@ export const accountProtected = (handle: string) =>
     hint: 'get_profile still returns its public profile fields.'
   });
 
-export const timelineMissing = (handle: string, what: string, listed: number) =>
+export const timelineMissing = (handle: string, what: string, listed: number | undefined) =>
   new ToolError({
     code: 'upstream_unavailable',
     retryable: true,
-    message: `X returned no ${what} for @${handle} although its profile lists ${listed}.`,
+    message:
+      listed === undefined
+        ? `X answered "not found" for the ${what} of @${handle}, an account that exists.`
+        : `X returned no ${what} for @${handle} although its profile lists ${listed}.`,
     hint: 'This is usually temporary; retry once in a few seconds.'
   });
 

@@ -419,6 +419,30 @@ describe('get_profile_statuses', () => {
     expect(unknown.urls).toHaveLength(3);
   });
 
+  it('asks for an Articles page once more when it answers "not found", since only an empty list means no Articles', async () => {
+    const respond = (articlesPage: () => Response) =>
+      fakeUpstream((url) => (url.pathname.endsWith('/articles') ? articlesPage() : json(profile)));
+    let calls = 0;
+    const flaky = respond(() => (calls++ === 0 ? json(userNotFound, 404) : json(articles)));
+    expect((await call(await connect(flaky.fetch), 'get_profile_articles', { handle: 'example_dev' })).data).toMatchObject({ returned: 1 });
+    expect(flaky.urls).toHaveLength(3);
+
+    const none = respond(() => json({ code: 200, results: [], cursor: { bottom: 'X' } }));
+    expect((await call(await connect(none.fetch), 'get_profile_articles', { handle: 'example_dev' })).data).toEqual({
+      posts: [],
+      returned: 0,
+      has_more: false,
+      note: '@example_dev has no Articles.'
+    });
+    expect(none.urls).toHaveLength(2);
+
+    const failing = respond(() => json(userNotFound, 404));
+    expect((await call(await connect(failing.fetch), 'get_profile_articles', { handle: 'example_dev' })).data).toMatchObject({
+      code: 'upstream_unavailable',
+      retryable: true
+    });
+  });
+
   it('treats an empty default timeline of an account with only replies as a success with a hint', async () => {
     const fake = fakeUpstream((url) =>
       url.pathname.endsWith('/statuses')

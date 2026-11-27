@@ -97,7 +97,10 @@ type ListKind = { key: 'posts' | 'users'; plural: string };
 const POSTS: ListKind = { key: 'posts', plural: 'posts' };
 const USERS: ListKind = { key: 'users', plural: 'accounts' };
 
-type EmptyFirstPage = (retry: () => Promise<PaginateResult<unknown>>) => Promise<PaginateResult<unknown> | { note: string }>;
+type EmptyFirstPage = (
+  retry: () => Promise<PaginateResult<unknown>>,
+  first: PaginateResult<unknown>
+) => Promise<PaginateResult<unknown> | { note: string }>;
 /** Runs when the newest page fails with HTTP 500; throws a more specific error when it can find one. */
 type FirstPageServerError = () => Promise<void>;
 
@@ -186,7 +189,7 @@ async function listPage(request: ListRequest): Promise<Rec> {
   let result = await run();
   if (result.firstPageEmpty) {
     serverErrorChecked = true;
-    const diagnosed = await request.onEmptyFirstPage(run);
+    const diagnosed = await request.onEmptyFirstPage(run, result);
     if ('note' in diagnosed) return { [kind.key]: [], returned: 0, has_more: false, note: diagnosed.note };
     result = diagnosed;
   }
@@ -235,7 +238,7 @@ function diagnoseAccount(
     listedButEmptyNote?: (listed: number) => string;
   }
 ): EmptyFirstPage {
-  return async (retry) => {
+  return async (retry, first) => {
     let user: Rec;
     try {
       user = await lookUpAccount(session, handle);
@@ -247,11 +250,16 @@ function diagnoseAccount(
       throw error;
     }
     const listed = options.counter === undefined ? undefined : num(user[options.counter]);
-    if (listed === undefined || listed === 0) return { note: options.emptyNote };
+    if (listed === 0) return { note: options.emptyNote };
+    // Without a count, an empty list (not a "not found") is the upstream saying that there is nothing.
+    if (listed === undefined && !first.firstPageMissing) return { note: options.emptyNote };
     const retried = await retry();
     if (retried.items.length > 0 || retried.hasMore) return retried;
-    // Only an empty list (not a "not found") shows that the listing really excludes everything the counter counts.
-    if (options.listedButEmptyNote !== undefined && !retried.firstPageMissing) return { note: options.listedButEmptyNote(listed) };
+    // Only an empty list shows that the listing really is empty, or excludes everything the counter counts.
+    if (!retried.firstPageMissing) {
+      if (listed === undefined) return { note: options.emptyNote };
+      if (options.listedButEmptyNote !== undefined) return { note: options.listedButEmptyNote(listed) };
+    }
     throw timelineMissing(handle, options.what, listed);
   };
 }
