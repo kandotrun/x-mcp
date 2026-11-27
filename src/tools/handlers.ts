@@ -22,7 +22,7 @@ import { decodeCursor, encodeCursor, isUpstreamCursor, MAX_UPSTREAM_CURSOR, scop
 import { KEY_LENGTH, STOP_KEYS } from '../domain/paginate';
 import { parseHandleRef, parsePostRef } from '../domain/normalize';
 import { paginate, type Page, type PaginateResult } from '../domain/paginate';
-import { projectPost, projectTrend, projectTypeaheadUser, projectUser, stripMosaic, tooLargePost, type SingleLimits } from '../domain/project';
+import { projectPost, projectTrend, projectTypeaheadUser, projectUser, stripMosaic, tooLargePost } from '../domain/project';
 import { routes, type Route } from '../upstream/routes';
 import type { UpstreamSession } from '../upstream/session';
 import type { ClassifyContext } from '../domain/classify';
@@ -37,8 +37,6 @@ const num = (value: unknown): number | undefined => (typeof value === 'number' &
 
 const RESTRICTED_REASONS = new Set(['suspended', 'protected', 'private', 'blocked', 'withheld']);
 const isRestricted = (reason: unknown) => typeof reason === 'string' && RESTRICTED_REASONS.has(reason);
-/** Caps used when one post's text and Article body together would exceed the result budget. */
-const OVERSIZED_SINGLE_LIMITS = { textMax: 6_000, articleMax: 6_000 };
 
 const fits = (value: unknown, limit: number) => JSON.stringify(value).length <= limit;
 
@@ -64,20 +62,29 @@ export async function getPost(args: ToolArgs<'get_post'>, { session }: ToolConte
 /** Characters left for the post in a {post, note?} result. */
 const singlePostBudget = (note?: string) => MAX_RESULT_CHARS - JSON.stringify(note === undefined ? { post: 0 } : { post: 0, note }).length + 1;
 
-/** The whole post when it fits in one result; otherwise its text or Article body is cut only as far as needed. */
+/**
+ * The whole post when it fits in one result. Otherwise the post text and the Article body are cut to the longest
+ * common length that fits (a binary search, since JSON escaping makes characters cost 1 to 6), so the longer one is
+ * cut first and nothing is cut further than needed.
+ */
 function conciseSinglePost(raw: Rec, budget: number): PostItem {
-  const limits: Required<SingleLimits> = { textMax: POST_TEXT_MAX, articleMax: ARTICLE_TEXT_MAX };
-  for (let attempt = 0; attempt < 4; attempt++) {
-    const post = projectPost(raw, 'single', limits);
-    const overflow = JSON.stringify(post).length - budget;
-    if (overflow <= 0) return post;
-    const text = 'text' in post ? [...post.text].length : 0;
-    const article = 'article' in post && post.article?.text !== undefined ? [...post.article.text].length : 0;
-    // Each character removed saves at least one in JSON; the margin covers the ellipsis and the *_truncated flag.
-    if (article > text) limits.articleMax = Math.max(0, Math.min(limits.articleMax, article) - overflow - 32);
-    else limits.textMax = Math.max(0, Math.min(limits.textMax, text) - overflow - 32);
+  const inBudget = (post: PostItem) => JSON.stringify(post).length <= budget;
+  const whole = projectPost(raw, 'single');
+  if (inBudget(whole)) return whole;
+  let low = 0;
+  let high = Math.max(POST_TEXT_MAX, ARTICLE_TEXT_MAX);
+  let best: PostItem | undefined;
+  while (low <= high) {
+    const cap = Math.floor((low + high) / 2);
+    const post = projectPost(raw, 'single', { textMax: cap, articleMax: cap });
+    if (inBudget(post)) {
+      best = post;
+      low = cap + 1;
+    } else {
+      high = cap - 1;
+    }
   }
-  return projectPost(raw, 'single', OVERSIZED_SINGLE_LIMITS);
+  return best ?? projectPost(raw, 'single', { textMax: 0, articleMax: 0 });
 }
 
 export async function getProfile(args: ToolArgs<'get_profile'>, { session }: ToolContext) {

@@ -80,8 +80,25 @@ describe('get_post', () => {
     const result = await call(await connect(fake.fetch), 'get_post', { id: '2000000000000000100' });
 
     expect(result.text.length).toBeLessThanOrEqual(MAX_RESULT_CHARS);
-    expect(result.text.length).toBeGreaterThan(MAX_RESULT_CHARS - 1_000);
+    expect(result.text.length).toBeGreaterThan(MAX_RESULT_CHARS - 50);
     expect(result.data.post).toMatchObject({ text_truncated: true });
+
+    // Each control character takes 6 characters in JSON; the cut keeps as many as fit, not none.
+    for (const heavy of ['\u0001'.repeat(25_000), `${'"'.repeat(12_000)}${'あ'.repeat(13_000)}`]) {
+      const escaped = fakeUpstream(() => json({ ...status, status: { ...status.status, text: heavy } }));
+      const cut = await call(await connect(escaped.fetch), 'get_post', { id: '2000000000000000100' });
+      expect(cut.text.length).toBeLessThanOrEqual(MAX_RESULT_CHARS);
+      expect(cut.text.length).toBeGreaterThan(MAX_RESULT_CHARS - 50);
+      expect(cut.data.post).toMatchObject({ text_truncated: true });
+    }
+
+    // A long Article body and a long post text are both kept as far as they fit.
+    const article = structuredClone(articles.results[0]) as Record<string, unknown>;
+    article.text = 't'.repeat(25_000);
+    (article.article as { content: { blocks: { type: string; text: string }[] } }).content.blocks = [{ type: 'unstyled', text: 'b'.repeat(20_000) }];
+    const both = await call(await connect(fakeUpstream(() => json({ code: 200, status: article })).fetch), 'get_post', { id: '2000000000000000300' });
+    expect(both.text.length).toBeLessThanOrEqual(MAX_RESULT_CHARS);
+    expect(both.text.length).toBeGreaterThan(MAX_RESULT_CHARS - 50);
   });
 
   it('returns the whole text of the longest post X allows', async () => {
