@@ -77,16 +77,30 @@ function keys(value: string): Set<string> {
   return set;
 }
 
+/** How many of the entries a call left unread on the newest page next_cursor remembers (see firstOld). */
+const STOP_KEYS = 3;
+
 /**
- * Index of the first entry of the newest page that was already there when the previous call read it. Entries above
- * both the topmost returned entry and the entry that call stopped at (stop) arrived later. Both are checked because
- * either can move down when an upper duplicate of it is deleted; with neither left on the page, nothing tells new
- * entries from old ones, so every entry is kept.
+ * Index on the newest page where the previous call's unread entries begin: unread entries above it arrived later.
+ * It is the topmost of the first few entries that call left unread (stop). Taking the topmost is safe: an entry can
+ * only show up above its place as a new copy (a repost), which merely skips fewer entries, while a copy below its
+ * place (left when the upper copy is deleted) is outranked by the other stop entries. If none of them is on the page
+ * (deleted, or pushed down to the next page), the entry returned last that is still there marks the spot; entries
+ * returned earlier are not used, because one of them can stay on top while new entries arrive below it (a pinned
+ * post). With none of them on the page, nothing tells new entries from old ones, so every entry is kept.
  */
-function firstOld(itemKeys: readonly string[], returned: ReadonlySet<string>, stop: string | undefined): number {
-  const topReturned = returned.size === 0 ? -1 : itemKeys.findIndex((key) => returned.has(key));
-  const stopped = stop === undefined ? -1 : itemKeys.indexOf(stop);
-  return topReturned < 0 || stopped < 0 ? Math.max(topReturned, stopped, 0) : Math.min(topReturned, stopped);
+function firstOld(itemKeys: readonly string[], returned: string, stop: string | undefined): number {
+  let topmost = -1;
+  for (let k = 0; stop !== undefined && k < stop.length; k += KEY_LENGTH) {
+    const index = itemKeys.indexOf(stop.slice(k, k + KEY_LENGTH));
+    if (index >= 0 && (topmost < 0 || index < topmost)) topmost = index;
+  }
+  if (topmost >= 0) return topmost;
+  for (let k = returned.length - KEY_LENGTH; k >= 0; k -= KEY_LENGTH) {
+    const index = itemKeys.indexOf(returned.slice(k, k + KEY_LENGTH));
+    if (index >= 0) return index;
+  }
+  return 0;
 }
 
 export async function paginate<T>(options: PaginateOptions<T>): Promise<PaginateResult<T>> {
@@ -122,7 +136,7 @@ export async function paginate<T>(options: PaginateOptions<T>): Promise<Paginate
     const skip = keys(returned);
     // On the newest page, skip the entries that arrived at its top after the listing started, or a list that grows
     // faster than it is read would never get past its newest page.
-    const from = up === null ? firstOld(itemKeys, skip, options.state.stop) : 0;
+    const from = up === null ? firstOld(itemKeys, returned, options.state.stop) : 0;
     if (seam !== null) skip.add(seam);
     const out: T[] = [];
     const added: string[] = [];
@@ -154,7 +168,14 @@ export async function paginate<T>(options: PaginateOptions<T>): Promise<Paginate
       const remembered = returned + added.join('');
       if (remembered.length > CURSOR_MAX_RETURNED * KEY_LENGTH) throw pageTooLarge();
       const next: CursorState = { up, seam, returned: remembered };
-      if (up === null) next.stop = itemKeys[i]!;
+      if (up === null) {
+        const unread: string[] = [];
+        for (let j = i; j < items.length && unread.length < STOP_KEYS; j++) {
+          const key = itemKeys[j]!;
+          if (!skip.has(key) && !unread.includes(key)) unread.push(key);
+        }
+        next.stop = unread.join('');
+      }
       return { ...base, items: out, hasMore: true, next, truncated };
     }
     // A bottom cursor equal to the one we asked with means the upstream did not advance.

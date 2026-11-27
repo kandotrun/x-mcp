@@ -182,6 +182,25 @@ describe('paginate', () => {
     }
   });
 
+  it('gets past the newest page when a returned entry stays at its top, such as a pinned post, while posts arrive below it', async () => {
+    for (const [count, arrivals] of [[1, 2], [3, 4], [5, 9]] as const) {
+      let top = 0;
+      const pinned = { id: '9000', sort: Number.POSITIVE_INFINITY };
+      const timeline = [pinned, ...Array.from({ length: 60 }, (_, k) => ({ id: String(1000 + k), sort: -k }))];
+      const fetchPage = async (up: string | null): Promise<Page> => {
+        const below = up === null ? Number.POSITIVE_INFINITY : Number(up.slice(1));
+        const entries = (up === null ? timeline : timeline.filter((entry) => entry.sort < below)).slice(0, 20);
+        return { items: entries.map((entry) => ({ id: entry.id })), bottom: `s${entries.at(-1)?.sort ?? -1e9}` };
+      };
+      const original = timeline.map((entry) => entry.id);
+      let next = 5000;
+      const seen = await drain(fetchPage, count, () => {
+        for (let k = 0; k < arrivals; k++) timeline.splice(1, 0, { id: String(next++), sort: ++top });
+      });
+      expect(original.filter((id) => !seen.includes(id)), `count ${count}, ${arrivals} new per call`).toEqual([]);
+    }
+  });
+
   it('keeps an unread entry above a lower duplicate of a returned one when the upper copy is deleted', async () => {
     let ids = ['91', '90', '91', '89'];
     const fetchPage = async (up: string | null): Promise<Page> => ({ items: (up === null ? ids : []).map((id) => ({ id })), bottom: up === null ? 'p2' : 'p3' });
@@ -201,6 +220,9 @@ describe('paginate', () => {
       let top = 0;
       const pageSize = 3 + Math.floor(random() * 20);
       const timeline: Entry[] = Array.from({ length: 5 + Math.floor(random() * 60) }, (_, k) => ({ id: String(nextId++), sort: -k * 10 }));
+      // Some timelines start with a pinned post, which stays on top while new posts arrive below it.
+      const pinned = random() < 0.3;
+      if (pinned) timeline.unshift({ id: String(nextId++), sort: Number.POSITIVE_INFINITY });
       const initial = [...timeline];
       const count = 1 + Math.floor(random() * 12);
       // Busy lists get more new entries between calls than one call returns.
@@ -211,8 +233,9 @@ describe('paginate', () => {
         requests++;
         if (flaky && random() < 0.2) return MISSING;
         const below = up === null ? Number.POSITIVE_INFINITY : Number(up.slice(1));
-        const entries = timeline.filter((entry) => entry.sort < below).slice(0, pageSize);
-        return { items: entries.map((entry) => ({ id: entry.id })), bottom: `s${entries.at(-1)?.sort ?? -1e9}` };
+        const entries = (up === null ? timeline : timeline.filter((entry) => entry.sort < below)).slice(0, pageSize);
+        const last = entries.at(-1)?.sort ?? -1e9;
+        return { items: entries.map((entry) => ({ id: entry.id })), bottom: `s${Number.isFinite(last) ? last : 1e12}` };
       };
       const seen: string[] = [];
       let state = START;
@@ -233,9 +256,10 @@ describe('paginate', () => {
         for (let k = 0; k < arrivals; k++) {
           const repost = random() < 0.1;
           const id = repost ? timeline[Math.floor(random() * timeline.length)]!.id : String(nextId++);
-          timeline.unshift({ id, sort: (top += 10), copy: repost });
+          timeline.splice(pinned ? 1 : 0, 0, { id, sort: (top += 10), copy: repost });
         }
-        if (random() < 0.25) timeline.splice(Math.floor(random() * timeline.length), 1).forEach((entry) => (entry.gone = true));
+        const victim = Math.floor(random() * timeline.length);
+        if (random() < 0.25 && !(pinned && victim === 0)) timeline.splice(victim, 1).forEach((entry) => (entry.gone = true));
         const repostIndex = timeline.findIndex((entry) => entry.copy);
         if (random() < 0.15 && repostIndex >= 0) timeline.splice(repostIndex, 1).forEach((entry) => (entry.gone = true));
       }

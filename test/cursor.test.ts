@@ -53,6 +53,21 @@ describe('encodeCursor / decodeCursor', () => {
     });
   });
 
+  it('round-trips the unread entries remembered on the newest page, and only there', () => {
+    const stop = idKey('91') + idKey('90') + idKey('89');
+    for (const value of [idKey('91'), stop]) {
+      const state = { up: null, seam: null, returned: idKey('92'), stop: value };
+      expect(decodeCursor(encodeCursor(STATUSES, state), STATUSES)).toEqual(state);
+    }
+    for (const state of [
+      { up: null, seam: null, returned: '', stop: stop + idKey('88') },
+      { up: 'DAAB', seam: null, returned: '', stop: idKey('91') },
+      { up: null, seam: null, returned: '', stop: 'not-a-key' }
+    ]) {
+      expect(codeOf(() => decodeCursor(encodeCursor(STATUSES, state), STATUSES)), JSON.stringify(state)).toMatch(/^invalid_cursor/);
+    }
+  });
+
   it('accepts every upstream cursor it would issue, including ones with periods', () => {
     for (const up of ['next.page', 'a:b~c', 'x'.repeat(512)]) {
       expect(isUpstreamCursor(up)).toBe(true);

@@ -130,7 +130,7 @@ const ENVELOPE_OVERHEAD = 600;
 export function itemBudgetFor(scope: string, state: CursorState, count: number): number {
   const seam = 'z'.repeat(KEY_LENGTH);
   const keys = 'z'.repeat(KEY_LENGTH * Math.min(CURSOR_MAX_RETURNED, state.returned.length / KEY_LENGTH + count));
-  const samePage = encodeCursor(scope, { up: state.up, seam, returned: keys, stop: seam }).length;
+  const samePage = encodeCursor(scope, { up: state.up, seam, returned: keys, stop: seam.repeat(3) }).length;
   // After a hop the cursor can carry the longest issued bottom cursor and this call's keys.
   const hopped = encodeCursor(scope, { up: 'x'.repeat(MAX_UPSTREAM_CURSOR), seam, returned: keys }).length;
   return MAX_RESULT_CHARS - ENVELOPE_OVERHEAD - Math.max(samePage, hopped);
