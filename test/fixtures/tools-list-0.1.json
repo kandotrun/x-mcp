@@ -1,0 +1,275 @@
+{
+  "tools": [
+    {
+      "name": "search_posts",
+      "title": "Search X posts",
+      "description": "Calls https://twitter.2-38.com/api/fx/2/search. Example: q=\"from:jack\", feed=\"latest\", count=10.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "q": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500,
+            "description": "X/Twitter search query, e.g. from:jack, #hashtag, or keywords"
+          },
+          "feed": {
+            "default": "latest",
+            "description": "Search feed type",
+            "type": "string",
+            "enum": [
+              "latest",
+              "top"
+            ]
+          },
+          "count": {
+            "default": 10,
+            "description": "Number of posts to request",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100
+          },
+          "cursor": {
+            "description": "Optional pagination cursor from a previous response",
+            "type": "string",
+            "maxLength": 500
+          }
+        },
+        "required": [
+          "q"
+        ]
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": true
+      },
+      "execution": {
+        "taskSupport": "forbidden"
+      }
+    },
+    {
+      "name": "get_post",
+      "title": "Get X post by status id",
+      "description": "Calls https://twitter.2-38.com/api/fx/2/status/:id.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[0-9]{1,30}$",
+            "description": "Numeric X/Twitter status id"
+          }
+        },
+        "required": [
+          "id"
+        ]
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": true
+      },
+      "execution": {
+        "taskSupport": "forbidden"
+      }
+    },
+    {
+      "name": "get_profile",
+      "title": "Get X profile",
+      "description": "Calls https://twitter.2-38.com/api/fx/2/profile/:handle.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "handle": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 30,
+            "description": "X/Twitter handle, with or without @"
+          }
+        },
+        "required": [
+          "handle"
+        ]
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": true
+      },
+      "execution": {
+        "taskSupport": "forbidden"
+      }
+    },
+    {
+      "name": "get_profile_statuses",
+      "title": "Get profile posts",
+      "description": "Calls https://twitter.2-38.com/api/fx/2/profile/:handle/statuses.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "handle": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 30,
+            "description": "X/Twitter handle, with or without @"
+          },
+          "count": {
+            "default": 10,
+            "description": "Number of posts to request",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100
+          },
+          "cursor": {
+            "description": "Optional pagination cursor from a previous response",
+            "type": "string",
+            "maxLength": 500
+          }
+        },
+        "required": [
+          "handle"
+        ]
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": true
+      },
+      "execution": {
+        "taskSupport": "forbidden"
+      }
+    },
+    {
+      "name": "get_profile_media",
+      "title": "Get profile media posts",
+      "description": "Calls https://twitter.2-38.com/api/fx/2/profile/:handle/media.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "handle": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 30,
+            "description": "X/Twitter handle, with or without @"
+          },
+          "count": {
+            "default": 10,
+            "description": "Number of media posts to request",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100
+          },
+          "cursor": {
+            "description": "Optional pagination cursor from a previous response",
+            "type": "string",
+            "maxLength": 500
+          }
+        },
+        "required": [
+          "handle"
+        ]
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": true
+      },
+      "execution": {
+        "taskSupport": "forbidden"
+      }
+    },
+    {
+      "name": "get_trends",
+      "title": "Get X trends",
+      "description": "Calls https://twitter.2-38.com/api/fx/2/trends.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "count": {
+            "default": 10,
+            "description": "Number of trends to request",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100
+          }
+        }
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": true
+      },
+      "execution": {
+        "taskSupport": "forbidden"
+      }
+    },
+    {
+      "name": "typeahead",
+      "title": "X typeahead",
+      "description": "Calls https://twitter.2-38.com/api/fx/2/typeahead.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "q": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200,
+            "description": "Typeahead query"
+          },
+          "count": {
+            "default": 10,
+            "description": "Number of suggestions to request",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100
+          }
+        },
+        "required": [
+          "q"
+        ]
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": true
+      },
+      "execution": {
+        "taskSupport": "forbidden"
+      }
+    },
+    {
+      "name": "get_openapi",
+      "title": "Get upstream OpenAPI document",
+      "description": "Calls https://twitter.2-38.com/api/fx/2/openapi.json.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {}
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": true
+      },
+      "execution": {
+        "taskSupport": "forbidden"
+      }
+    }
+  ]
+}

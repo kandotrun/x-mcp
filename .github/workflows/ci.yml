@@ -1,0 +1,60 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      WRANGLER_SEND_METRICS: "false"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # Reads the pnpm version from "packageManager" in package.json.
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 26
+          cache: pnpm
+
+      # GitHub's dependency graph cannot read a multi-document pnpm-lock.yaml, so
+      # Dependabot alerts would silently stop. Keep `pmOnFail: ignore` in pnpm-workspace.yaml.
+      - name: Lockfile is a single YAML document
+        run: |
+          if grep -q '^---$' pnpm-lock.yaml; then
+            echo "::error file=pnpm-lock.yaml::pnpm-lock.yaml has multiple YAML documents; set pmOnFail: ignore in pnpm-workspace.yaml"
+            exit 1
+          fi
+
+      - run: pnpm install --frozen-lockfile
+
+      # Generates worker-configuration.d.ts (gitignored), then type-checks src/ and test/.
+      - run: pnpm run check
+
+      - run: pnpm test
+
+      - name: Bundle the Worker (dry run)
+        run: pnpm run build
+
+      - name: Smoke test the Worker in workerd (no upstream calls)
+        run: |
+          pnpm run dev --ip 127.0.0.1 --port 8787 > wrangler-dev.log 2>&1 &
+          for _ in $(seq 1 60); do
+            curl -fsS http://127.0.0.1:8787/health 2>/dev/null | grep -q '"service": "x-mcp"' && break
+            sleep 1
+          done
+          pnpm run smoke http://127.0.0.1:8787/mcp --offline || { cat wrangler-dev.log; exit 1; }

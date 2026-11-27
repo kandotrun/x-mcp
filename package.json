@@ -1,23 +1,33 @@
 {
   "name": "x-mcp",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
-  "description": "Read-only MCP server for public X/Twitter search and retrieval via twitter.2-38.com",
+  "description": "Read-only MCP server for public X/Twitter posts, profiles, timelines and trends via twitter.2-38.com",
+  "packageManager": "pnpm@12.23.0",
+  "engines": {
+    "node": ">=24"
+  },
   "scripts": {
+    "dev": "wrangler dev --config wrangler.example.jsonc",
     "types:worker": "wrangler types worker-configuration.d.ts --config wrangler.example.jsonc",
-    "check": "npm run types:worker && tsc --noEmit",
+    "typecheck": "tsc --noEmit && tsc --noEmit -p test/tsconfig.json",
+    "check": "pnpm run types:worker && pnpm run typecheck",
+    "test": "vitest run",
+    "build": "wrangler deploy --dry-run --config wrangler.example.jsonc --outdir dist",
+    "smoke": "node scripts/smoke.ts",
     "deploy:dry": "wrangler deploy --dry-run --config wrangler.jsonc",
     "deploy": "wrangler deploy --keep-vars --config wrangler.jsonc"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.29.0",
-    "hono": "^4.12.26",
-    "zod": "^4.2.1"
+    "@modelcontextprotocol/sdk": "^1.32.2",
+    "hono": "^4.13.22",
+    "zod": "^4.6.7"
   },
   "devDependencies": {
-    "@types/node": "^25.9.3",
-    "typescript": "^6.0.3",
-    "wrangler": "^4.101.0"
+    "@types/node": "^26.6.11",
+    "typescript": "^7.0.2",
+    "vitest": "^5.1.2",
+    "wrangler": "^4.168.0"
   }
 }

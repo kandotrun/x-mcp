@@ -1,0 +1,5 @@
+{
+  "code": 400,
+  "error": "Unsupported API path",
+  "allowedPrefix": "/api/fx/2/..."
+}

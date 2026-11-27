@@ -7,7 +7,9 @@
   "account_id": "YOUR_CLOUDFLARE_ACCOUNT_ID",
   "observability": { "enabled": true },
   "vars": {
-    "UPSTREAM_BASE_URL": "https://twitter.2-38.com/api/fx"
+    "UPSTREAM_BASE_URL": "https://twitter.2-38.com/api/fx",
+    // Only changes tool wording; set to "true" when upstream keyword search works again.
+    "SEARCH_ENABLED": "false"
   },
   "routes": [
     { "pattern": "x.mcp.2-38.com", "custom_domain": true }

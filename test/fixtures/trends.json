@@ -1,0 +1,28 @@
+{
+  "code": 200,
+  "timeline_type": "trending",
+  "trends": [
+    {
+      "name": "#ExampleTrend",
+      "rank": "1",
+      "context": "Technology \u00b7 Trending",
+      "grouped_topics": []
+    },
+    {
+      "name": "Sample Topic",
+      "rank": "2",
+      "context": "Trending in Japan",
+      "grouped_topics": []
+    },
+    {
+      "name": "Third Trend",
+      "rank": "3",
+      "context": "Sports \u00b7 Trending",
+      "grouped_topics": []
+    }
+  ],
+  "cursor": {
+    "top": "TOPCURSOR-trends",
+    "bottom": "BOTTOMCURSOR-trends"
+  }
+}

@@ -1,0 +1,269 @@
+{
+  "code": 200,
+  "status": {
+    "type": "status",
+    "url": "https://x.com/example_dev/status/2000000000000000100",
+    "id": "2000000000000000100",
+    "text": "Shipping a tiny MCP server today. Poll below!",
+    "raw_text": {
+      "text": "Shipping a tiny MCP server today. Poll below!",
+      "display_text_range": [
+        0,
+        45
+      ],
+      "facets": []
+    },
+    "author": {
+      "screen_name": "example_dev",
+      "url": "https://x.com/example_dev",
+      "id": "1000000001",
+      "followers": 98765,
+      "following": 321,
+      "likes": 4567,
+      "media_count": 89,
+      "statuses": 2345,
+      "name": "Example Dev",
+      "description": "Builds small tools.",
+      "raw_description": {
+        "text": "Builds small tools.",
+        "facets": []
+      },
+      "location": "Internet",
+      "banner_url": "https://pbs.twimg.com/profile_banners/1000000001/1700000000",
+      "avatar_url": "https://pbs.twimg.com/profile_images/1000000001/avatar_normal.jpg",
+      "joined": "Mon Jan 02 03:04:05 +0000 2012",
+      "protected": false,
+      "website": {
+        "url": "https://example.com",
+        "display_url": "example.com"
+      },
+      "verification": {
+        "verified": true,
+        "verified_at": null,
+        "type": "individual"
+      },
+      "type": "profile"
+    },
+    "replies": 12,
+    "reposts": 34,
+    "likes": 567,
+    "bookmarks": 8,
+    "quotes": 3,
+    "embed_card": "tweet",
+    "created_at": "Thu Nov 26 20:00:24 +0000 2026",
+    "created_timestamp": 1795723224,
+    "views": 12345,
+    "is_note_tweet": false,
+    "community_note": {
+      "text": "Context: this is a fictional example.",
+      "facets": []
+    },
+    "lang": "en",
+    "replying_to": null,
+    "media": {
+      "all": [
+        {
+          "type": "photo",
+          "id": "2000000000000000101",
+          "url": "https://pbs.twimg.com/media/EXAMPLEPHOTO.jpg?name=orig",
+          "width": 1024,
+          "height": 768,
+          "altText": "A whiteboard sketch",
+          "tagged_users": []
+        },
+        {
+          "id": "2000000000000000102",
+          "url": "https://video.twimg.com/amplify_video/2000000000000000102/vid/avc1/1280x720/EXAMPLE.mp4?tag=16",
+          "thumbnail_url": "https://pbs.twimg.com/media/EXAMPLETHUMB.jpg",
+          "duration": 17.664,
+          "width": 1280,
+          "height": 720,
+          "format": "video/mp4",
+          "type": "video",
+          "formats": [
+            {
+              "url": "https://video.twimg.com/amplify_video/2000000000000000102/pl/EXAMPLE.m3u8?tag=16",
+              "container": "m3u8"
+            },
+            {
+              "url": "https://video.twimg.com/amplify_video/2000000000000000102/vid/avc1/480x270/EXAMPLE.mp4?tag=16",
+              "bitrate": 288000,
+              "container": "mp4",
+              "codec": "h264"
+            },
+            {
+              "url": "https://video.twimg.com/amplify_video/2000000000000000102/vid/avc1/1280x720/EXAMPLE.mp4?tag=16",
+              "bitrate": 2176000,
+              "container": "mp4",
+              "codec": "h264"
+            }
+          ],
+          "publisher": null
+        }
+      ],
+      "photos": [
+        {
+          "type": "photo",
+          "id": "2000000000000000101",
+          "url": "https://pbs.twimg.com/media/EXAMPLEPHOTO.jpg?name=orig",
+          "width": 1024,
+          "height": 768,
+          "altText": "A whiteboard sketch",
+          "tagged_users": []
+        }
+      ],
+      "videos": [
+        {
+          "id": "2000000000000000102",
+          "url": "https://video.twimg.com/amplify_video/2000000000000000102/vid/avc1/1280x720/EXAMPLE.mp4?tag=16",
+          "thumbnail_url": "https://pbs.twimg.com/media/EXAMPLETHUMB.jpg",
+          "duration": 17.664,
+          "width": 1280,
+          "height": 720,
+          "format": "video/mp4",
+          "type": "video",
+          "formats": [
+            {
+              "url": "https://video.twimg.com/amplify_video/2000000000000000102/pl/EXAMPLE.m3u8?tag=16",
+              "container": "m3u8"
+            },
+            {
+              "url": "https://video.twimg.com/amplify_video/2000000000000000102/vid/avc1/480x270/EXAMPLE.mp4?tag=16",
+              "bitrate": 288000,
+              "container": "mp4",
+              "codec": "h264"
+            },
+            {
+              "url": "https://video.twimg.com/amplify_video/2000000000000000102/vid/avc1/1280x720/EXAMPLE.mp4?tag=16",
+              "bitrate": 2176000,
+              "container": "mp4",
+              "codec": "h264"
+            }
+          ],
+          "publisher": null
+        }
+      ],
+      "mosaic": {
+        "type": "mosaic_photo",
+        "formats": {
+          "jpeg": "https://mosaic.example.invalid/jpeg/2000000000000000100/EXAMPLE",
+          "webp": "https://mosaic.example.invalid/webp/2000000000000000100/EXAMPLE"
+        }
+      }
+    },
+    "provider": "twitter",
+    "reposted_by": null,
+    "quote": {
+      "type": "status",
+      "url": "https://x.com/sample_news/status/2000000000000000050",
+      "id": "2000000000000000050",
+      "text": "Quoted post about samples.",
+      "raw_text": {
+        "text": "Quoted post about samples.",
+        "display_text_range": [
+          0,
+          26
+        ],
+        "facets": []
+      },
+      "author": {
+        "screen_name": "sample_news",
+        "url": "https://x.com/sample_news",
+        "id": "1000000002",
+        "followers": 5000000,
+        "following": 321,
+        "likes": 4567,
+        "media_count": 89,
+        "statuses": 2345,
+        "name": "Sample News",
+        "description": "News about samples.",
+        "raw_description": {
+          "text": "News about samples.",
+          "facets": []
+        },
+        "location": "Internet",
+        "banner_url": "https://pbs.twimg.com/profile_banners/1000000002/1700000000",
+        "avatar_url": "https://pbs.twimg.com/profile_images/1000000002/avatar_normal.jpg",
+        "joined": "Mon Jan 02 03:04:05 +0000 2012",
+        "protected": false,
+        "website": {
+          "url": "https://example.com",
+          "display_url": "example.com"
+        },
+        "verification": {
+          "verified": false,
+          "verified_at": null,
+          "type": null
+        },
+        "type": "profile"
+      },
+      "replies": 12,
+      "reposts": 34,
+      "likes": 567,
+      "bookmarks": 8,
+      "quotes": 3,
+      "embed_card": "tweet",
+      "created_at": "Thu Nov 26 20:00:24 +0000 2026",
+      "created_timestamp": 1795723224,
+      "views": 12345,
+      "is_note_tweet": false,
+      "community_note": null,
+      "lang": "en",
+      "replying_to": null,
+      "media": {},
+      "provider": "twitter",
+      "reposted_by": null,
+      "possibly_sensitive": false
+    },
+    "poll": {
+      "choices": [
+        {
+          "label": "Yes",
+          "count": 30,
+          "percentage": 75
+        },
+        {
+          "label": "No",
+          "count": 10,
+          "percentage": 25
+        }
+      ],
+      "total_votes": 40,
+      "ends_at": "2026-11-28T20:00:24Z",
+      "time_left_en": "1 day left"
+    },
+    "possibly_sensitive": false
+  },
+  "thread": null,
+  "author": {
+    "screen_name": "example_dev",
+    "url": "https://x.com/example_dev",
+    "id": "1000000001",
+    "followers": 98765,
+    "following": 321,
+    "likes": 4567,
+    "media_count": 89,
+    "statuses": 2345,
+    "name": "Example Dev",
+    "description": "Builds small tools.",
+    "raw_description": {
+      "text": "Builds small tools.",
+      "facets": []
+    },
+    "location": "Internet",
+    "banner_url": "https://pbs.twimg.com/profile_banners/1000000001/1700000000",
+    "avatar_url": "https://pbs.twimg.com/profile_images/1000000001/avatar_normal.jpg",
+    "joined": "Mon Jan 02 03:04:05 +0000 2012",
+    "protected": false,
+    "website": {
+      "url": "https://example.com",
+      "display_url": "example.com"
+    },
+    "verification": {
+      "verified": true,
+      "verified_at": null,
+      "type": "individual"
+    },
+    "type": "profile"
+  }
+}

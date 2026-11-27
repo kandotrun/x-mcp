@@ -1,4 +1,5 @@
 node_modules/
+dist/
 .wrangler/
 .dev.vars
 .env
@@ -6,4 +7,5 @@ node_modules/
 wrangler.jsonc
 worker-configuration.d.ts
 npm-debug.log*
+pnpm-debug.log*
 .DS_Store

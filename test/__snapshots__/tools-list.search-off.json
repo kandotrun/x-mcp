@@ -1,0 +1,529 @@
+[
+  {
+    "name": "search_posts",
+    "title": "Search X posts (currently unavailable)",
+    "description": "Search public X (Twitter) posts (tweets) by keywords, #hashtags or X search operators such as from:jack. Currently unavailable: the upstream search backend is disabled, so calls fail fast with code \"feature_unavailable\" and retrying does not help. Instead, use get_profile_statuses for posts by a known account (from:jack -> {\"handle\":\"jack\"}) or get_post for a known post URL or ID. When search works it returns {posts:[...],returned,has_more,next_cursor?} with the get_profile_statuses post fields, at most count per call; pass next_cursor back unchanged as cursor for more.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "q": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500,
+          "description": "Search query in X search syntax, 1-500 characters: keywords, \"exact phrase\", #hashtag, or operators such as from:jack. Example: \"from:nasa artemis\"."
+        },
+        "feed": {
+          "default": "latest",
+          "description": "\"latest\" (default) for the newest matching posts, or \"top\" for popular ones.",
+          "type": "string",
+          "enum": [
+            "latest",
+            "top"
+          ]
+        },
+        "count": {
+          "default": 10,
+          "description": "Maximum number of posts to return, 1-100 (default 10). Each call reads one upstream page (about 20 posts), so fewer can come back; has_more and next_cursor say whether to continue.",
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 100
+        },
+        "cursor": {
+          "description": "Omit for the newest results. To continue, pass next_cursor from the previous result of this tool exactly as returned, with the same q and feed. A later page can repeat an item, so de-duplicate by id.",
+          "type": "string",
+          "maxLength": 8192
+        },
+        "response_format": {
+          "default": "concise",
+          "description": "\"concise\" (default): the compact fields listed in the tool description. \"detailed\": the full upstream objects, several times larger, so fewer fit in one result; use it only when you need a field that concise omits.",
+          "type": "string",
+          "enum": [
+            "concise",
+            "detailed"
+          ]
+        }
+      },
+      "required": [
+        "q"
+      ],
+      "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "annotations": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": true
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    }
+  },
+  {
+    "name": "get_post",
+    "title": "Get X post",
+    "description": "Get one public X (Twitter) post (tweet) by URL or numeric ID: full text, author, time, engagement metrics, media, quoted post, reply target, link card, poll, Community Note, and the text of an X Article (up to 20,000 characters). Text too long for one result is cut and marked text_truncated:true (or article.text_truncated:true). Use it whenever you have a post link (x.com or twitter.com .../status/<id>) or ID, to read the full text of a list item marked text_truncated, or to open the post a reply answers (reply_to.post_id). Example: {\"id\":\"https://x.com/jack/status/20\"} or {\"id\":\"20\"}. Returns {post:{id,url,created_at,author{handle,name,verified?},text,lang?,metrics{replies,reposts,quotes,likes,bookmarks?,views?},reply_to?{handle,post_id},quote?,media?,card?,poll?,article?,community_note?}}; optional fields appear only when present, and response_format \"detailed\" returns the upstream post object instead. Unknown or deleted posts return code \"not_found\"; posts that are not public return \"restricted\". Replies to a post and whole threads cannot be listed.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512,
+          "description": "The post: its numeric ID as a string, e.g. \"20\", or its URL, e.g. \"https://x.com/jack/status/20\" (twitter.com and mobile links work; /photo/1 suffixes and ?query strings are ignored). Quote numeric IDs: JSON numbers above 2^53 lose precision."
+        },
+        "response_format": {
+          "default": "concise",
+          "description": "\"concise\" (default): the compact fields listed in the tool description. \"detailed\": the full upstream objects, several times larger, so fewer fit in one result; use it only when you need a field that concise omits.",
+          "type": "string",
+          "enum": [
+            "concise",
+            "detailed"
+          ]
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "annotations": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": true
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    }
+  },
+  {
+    "name": "get_profile",
+    "title": "Get X profile",
+    "description": "Get the public profile of one X (Twitter) account by handle or profile URL: display name, bio, location, website, join date, follower, following and post counts, verification and protected status. Use it to check that an account exists or to describe it; for its posts use get_profile_statuses. Example: {\"handle\":\"nasa\"} (\"@nasa\" and \"https://x.com/nasa\" also work; case-insensitive). include_about=true adds X's \"About this account\" data (the country the account is based in, username changes). Returns {user:{handle,name,id,url,description?,location?,website?,joined,followers,following,posts,likes,media_count,verified?,verified_type?,protected?,about?}}. Unknown accounts return code \"not_found\" and suspended accounts \"restricted\"; numeric account IDs are not supported.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "handle": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512,
+          "description": "The account: a handle with or without \"@\", e.g. \"nasa\" or \"@nasa\", or a profile URL such as \"https://x.com/nasa\" (case-insensitive). A post URL also works; its account is used. Numeric account IDs are not supported."
+        },
+        "include_about": {
+          "default": false,
+          "description": "true adds about: X's \"About this account\" data (based_in country, whether that is accurate, how the account was created, username changes) when X provides it. Default false.",
+          "type": "boolean"
+        },
+        "response_format": {
+          "default": "concise",
+          "description": "\"concise\" (default): the compact fields listed in the tool description. \"detailed\": the full upstream objects, several times larger, so fewer fit in one result; use it only when you need a field that concise omits.",
+          "type": "string",
+          "enum": [
+            "concise",
+            "detailed"
+          ]
+        }
+      },
+      "required": [
+        "handle"
+      ],
+      "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "annotations": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": true
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    }
+  },
+  {
+    "name": "get_profile_statuses",
+    "title": "Get profile posts",
+    "description": "Get recent public posts (tweets) and reposts from one X (Twitter) account, newest first; include_replies=true also returns its replies. Use it for \"what did @user post\" questions and for from:<user> requests; for one known post use get_post. Example: {\"handle\":\"nasa\",\"count\":5}. Returns {posts:[...],returned,has_more,next_cursor?,note?}; posts have the get_post fields, but text over 1,000 characters is cut (text_truncated:true; get_post returns all of it that fits in one result). A post with reposted_by is a repost: author is the original poster and created_at the original time, so the list is not strictly sorted by created_at. Each call reads one upstream page (about 20 posts) and returns at most count of them (default 10); while has_more is true, pass next_cursor back unchanged as cursor for older posts. Protected, suspended and unknown accounts return code \"restricted\" or \"not_found\".",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "handle": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512,
+          "description": "The account: a handle with or without \"@\", e.g. \"nasa\" or \"@nasa\", or a profile URL such as \"https://x.com/nasa\" (case-insensitive). A post URL also works; its account is used. Numeric account IDs are not supported."
+        },
+        "count": {
+          "default": 10,
+          "description": "Maximum number of posts to return, 1-100 (default 10). Each call reads one upstream page (about 20 posts), so fewer can come back; has_more and next_cursor say whether to continue.",
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 100
+        },
+        "cursor": {
+          "description": "Omit for the newest results. To continue, pass next_cursor from the previous result of this tool exactly as returned, with the same handle and include_replies value. A later page can repeat an item, so de-duplicate by id.",
+          "type": "string",
+          "maxLength": 8192
+        },
+        "include_replies": {
+          "default": false,
+          "description": "true also returns the account's replies, each with reply_to. Default false. A cursor only works with the include_replies value it was issued for.",
+          "type": "boolean"
+        },
+        "response_format": {
+          "default": "concise",
+          "description": "\"concise\" (default): the compact fields listed in the tool description. \"detailed\": the full upstream objects, several times larger, so fewer fit in one result; use it only when you need a field that concise omits.",
+          "type": "string",
+          "enum": [
+            "concise",
+            "detailed"
+          ]
+        }
+      },
+      "required": [
+        "handle"
+      ],
+      "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "annotations": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": true
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    }
+  },
+  {
+    "name": "get_profile_media",
+    "title": "Get profile media posts",
+    "description": "Get recent public posts with photos or videos from one X (Twitter) account, newest first. Use it to find an account's images or videos; for all of its posts use get_profile_statuses. Example: {\"handle\":\"nasa\",\"count\":5}. Returns {posts:[...],returned,has_more,next_cursor?} with the get_profile_statuses post fields; each media item is {type:\"photo\"|\"video\"|\"gif\",url,alt?,thumbnail_url?,duration_s?}, where url is the original image or the video file, or {type:\"external\",url} for a video embedded from another site. Upstream pages vary in size, so a call can return fewer than count posts; while has_more is true, pass next_cursor back unchanged as cursor for older media.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "handle": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512,
+          "description": "The account: a handle with or without \"@\", e.g. \"nasa\" or \"@nasa\", or a profile URL such as \"https://x.com/nasa\" (case-insensitive). A post URL also works; its account is used. Numeric account IDs are not supported."
+        },
+        "count": {
+          "default": 10,
+          "description": "Maximum number of media posts to return, 1-100 (default 10). Each call reads one upstream page, which varies in size, so fewer can come back; has_more and next_cursor say whether to continue.",
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 100
+        },
+        "cursor": {
+          "description": "Omit for the newest results. To continue, pass next_cursor from the previous result of this tool exactly as returned, with the same handle. A later page can repeat an item, so de-duplicate by id.",
+          "type": "string",
+          "maxLength": 8192
+        },
+        "response_format": {
+          "default": "concise",
+          "description": "\"concise\" (default): the compact fields listed in the tool description. \"detailed\": the full upstream objects, several times larger, so fewer fit in one result; use it only when you need a field that concise omits.",
+          "type": "string",
+          "enum": [
+            "concise",
+            "detailed"
+          ]
+        }
+      },
+      "required": [
+        "handle"
+      ],
+      "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "annotations": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": true
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    }
+  },
+  {
+    "name": "get_trends",
+    "title": "Get X trends",
+    "description": "Get the current trending topics on X (Twitter), each with a context label such as \"Sports · Trending\". The region is chosen upstream and cannot be set, and this tool does not return posts about a trend. Example: {\"count\":10}. Returns {trends:[{name,context?,rank?}],returned,note?}; an empty list means the upstream has no trends right now and is not an error. count is 1-100 (default 10); values above 50 are reduced to 50, the upstream maximum.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "count": {
+          "default": 10,
+          "description": "Maximum number of trends to return, 1-100 (default 10). Values above 50 are reduced to 50, the upstream maximum.",
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 100
+        }
+      },
+      "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "annotations": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": true
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    }
+  },
+  {
+    "name": "typeahead",
+    "title": "X typeahead (currently unavailable)",
+    "description": "Get X (Twitter) search-box suggestions (accounts and topics) for a partial name. Currently unavailable: the upstream search backend is disabled, so calls fail fast with code \"feature_unavailable\" and retrying does not help. If you know or can guess the handle, call get_profile instead. When it works it returns {users:[{handle,name,verified?,followers}],topics:[...]}, at most count of each (default 10).",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "q": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200,
+          "description": "Partial account name, handle or topic to complete, 1-200 characters. Example: \"nasa\"."
+        },
+        "count": {
+          "default": 10,
+          "description": "Maximum number of suggestions of each kind (accounts and topics), 1-100 (default 10).",
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 100
+        }
+      },
+      "required": [
+        "q"
+      ],
+      "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "annotations": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": true
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    }
+  },
+  {
+    "name": "get_openapi",
+    "title": "Upstream capability summary (deprecated)",
+    "description": "Deprecated and kept only so existing callers keep working; it will be removed in a future version. Returns a short static summary of the upstream endpoint behind each tool and whether it is currently advertised as available; it no longer returns the upstream OpenAPI document. You do not need it for X lookups, because tools/list already describes every tool. Example: {}.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {},
+      "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "annotations": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": true
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    }
+  },
+  {
+    "name": "get_profile_articles",
+    "title": "Get profile Articles",
+    "description": "Get X Articles (long-form posts) published by one X (Twitter) account, newest first. Use it to find an account's Articles, then call get_post with a result's url to read the Article text (up to 20,000 characters). Example: {\"handle\":\"jack\",\"count\":5}. Returns {posts:[...],returned,has_more,next_cursor?,note?} with the get_profile_statuses post fields plus article{title,preview_text}. While has_more is true, pass next_cursor back unchanged as cursor for older Articles.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "handle": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512,
+          "description": "The account: a handle with or without \"@\", e.g. \"nasa\" or \"@nasa\", or a profile URL such as \"https://x.com/nasa\" (case-insensitive). A post URL also works; its account is used. Numeric account IDs are not supported."
+        },
+        "count": {
+          "default": 10,
+          "description": "Maximum number of Article posts to return, 1-100 (default 10). Each call reads one upstream page, which varies in size, so fewer can come back; has_more and next_cursor say whether to continue.",
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 100
+        },
+        "cursor": {
+          "description": "Omit for the newest results. To continue, pass next_cursor from the previous result of this tool exactly as returned, with the same handle. A later page can repeat an item, so de-duplicate by id.",
+          "type": "string",
+          "maxLength": 8192
+        },
+        "response_format": {
+          "default": "concise",
+          "description": "\"concise\" (default): the compact fields listed in the tool description. \"detailed\": the full upstream objects, several times larger, so fewer fit in one result; use it only when you need a field that concise omits.",
+          "type": "string",
+          "enum": [
+            "concise",
+            "detailed"
+          ]
+        }
+      },
+      "required": [
+        "handle"
+      ],
+      "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "annotations": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": true
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    }
+  },
+  {
+    "name": "get_profile_followers",
+    "title": "Get profile followers",
+    "description": "List public accounts that follow one X (Twitter) account, in the order X returns them (newest followers first). Use it for \"who follows @user\" questions; for the account itself use get_profile. Example: {\"handle\":\"nasa\",\"count\":20}. Returns {users:[{handle,name,id,url,description?,location?,website?,joined,followers,following,posts,likes,media_count,verified?,verified_type?,protected?}],returned,has_more,next_cursor?,note?}. Each call reads one upstream page (about 70 accounts) and returns at most count of them (default 10); while has_more is true, pass next_cursor back unchanged as cursor. Protected, suspended and unknown accounts return code \"restricted\" or \"not_found\".",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "handle": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512,
+          "description": "The account: a handle with or without \"@\", e.g. \"nasa\" or \"@nasa\", or a profile URL such as \"https://x.com/nasa\" (case-insensitive). A post URL also works; its account is used. Numeric account IDs are not supported."
+        },
+        "count": {
+          "default": 10,
+          "description": "Maximum number of accounts to return, 1-100 (default 10). Each call reads one upstream page (about 70 accounts), so fewer can come back; has_more and next_cursor say whether to continue.",
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 100
+        },
+        "cursor": {
+          "description": "Omit for the newest results. To continue, pass next_cursor from the previous result of this tool exactly as returned, with the same handle. A later page can repeat an item, so de-duplicate by id.",
+          "type": "string",
+          "maxLength": 8192
+        },
+        "response_format": {
+          "default": "concise",
+          "description": "\"concise\" (default): the compact fields listed in the tool description. \"detailed\": the full upstream objects, several times larger, so fewer fit in one result; use it only when you need a field that concise omits.",
+          "type": "string",
+          "enum": [
+            "concise",
+            "detailed"
+          ]
+        }
+      },
+      "required": [
+        "handle"
+      ],
+      "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "annotations": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": true
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    }
+  },
+  {
+    "name": "get_profile_following",
+    "title": "Get profile following",
+    "description": "List public accounts that one X (Twitter) account follows, in the order X returns them. Use it for \"who does @user follow\" questions. Example: {\"handle\":\"jack\",\"count\":20}. Returns {users:[...],returned,has_more,next_cursor?,note?} with the get_profile_followers user fields; at most count per call (default 10); while has_more is true, pass next_cursor back unchanged as cursor. Protected, suspended and unknown accounts return code \"restricted\" or \"not_found\".",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "handle": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512,
+          "description": "The account: a handle with or without \"@\", e.g. \"nasa\" or \"@nasa\", or a profile URL such as \"https://x.com/nasa\" (case-insensitive). A post URL also works; its account is used. Numeric account IDs are not supported."
+        },
+        "count": {
+          "default": 10,
+          "description": "Maximum number of accounts to return, 1-100 (default 10). Each call reads one upstream page, which varies in size, so fewer can come back; has_more and next_cursor say whether to continue.",
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 100
+        },
+        "cursor": {
+          "description": "Omit for the newest results. To continue, pass next_cursor from the previous result of this tool exactly as returned, with the same handle. A later page can repeat an item, so de-duplicate by id.",
+          "type": "string",
+          "maxLength": 8192
+        },
+        "response_format": {
+          "default": "concise",
+          "description": "\"concise\" (default): the compact fields listed in the tool description. \"detailed\": the full upstream objects, several times larger, so fewer fit in one result; use it only when you need a field that concise omits.",
+          "type": "string",
+          "enum": [
+            "concise",
+            "detailed"
+          ]
+        }
+      },
+      "required": [
+        "handle"
+      ],
+      "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "annotations": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": true
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    }
+  },
+  {
+    "name": "get_post_reposts",
+    "title": "Get post reposters",
+    "description": "List accounts that reposted (retweeted) one public X (Twitter) post, by post URL or numeric ID. Use it for \"who reposted this\" questions; quote posts and replies cannot be listed. Example: {\"id\":\"https://x.com/jack/status/20\",\"count\":20}. Returns {users:[...],returned,has_more,next_cursor?,note?} with the get_profile_followers user fields; at most count per call (default 10); while has_more is true, pass next_cursor back unchanged as cursor. Unknown or deleted posts return code \"not_found\".",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512,
+          "description": "The post: its numeric ID as a string, e.g. \"20\", or its URL, e.g. \"https://x.com/jack/status/20\" (twitter.com and mobile links work; /photo/1 suffixes and ?query strings are ignored). Quote numeric IDs: JSON numbers above 2^53 lose precision."
+        },
+        "count": {
+          "default": 10,
+          "description": "Maximum number of accounts to return, 1-100 (default 10). Each call reads one upstream page, which varies in size, so fewer can come back; has_more and next_cursor say whether to continue.",
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 100
+        },
+        "cursor": {
+          "description": "Omit for the newest results. To continue, pass next_cursor from the previous result of this tool exactly as returned, with the same id. A later page can repeat an item, so de-duplicate by id.",
+          "type": "string",
+          "maxLength": 8192
+        },
+        "response_format": {
+          "default": "concise",
+          "description": "\"concise\" (default): the compact fields listed in the tool description. \"detailed\": the full upstream objects, several times larger, so fewer fit in one result; use it only when you need a field that concise omits.",
+          "type": "string",
+          "enum": [
+            "concise",
+            "detailed"
+          ]
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "annotations": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": true
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    }
+  }
+]

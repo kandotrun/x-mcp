@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1280" height="640" viewBox="0 0 1280 640" role="img" aria-labelledby="title desc">
   <title id="title">x-mcp — X/Twitterの公開情報を、AIエージェントから</title>
-  <desc id="desc">AIエージェントがsearch_postsを呼び、x-mcpを経由してtwitter.2-38.comにリクエストする概念図。引数の例はqがfrom:jack、feedがlatest、countが2。get_profileにhandle jackを渡す例も示す。実際の取得結果ではない。</desc>
+  <desc id="desc">AIエージェントがget_profile_statusesを呼び、x-mcpを経由してtwitter.2-38.comにリクエストする概念図。引数の例はhandleがjack、countが2。get_profileにhandle jackを渡す例も示す。実際の取得結果ではない。</desc>
   <defs>
     <linearGradient id="background" x1="0" y1="0" x2="1" y2="1">
       <stop stop-color="#0b1320"/>
@@ -20,14 +20,14 @@
     <text x="56" y="202" fill="#f7fafc" font-size="88" font-weight="750" letter-spacing="-4">x-mcp</text>
     <text x="58" y="279" fill="#f7fafc" font-size="38" font-weight="650" letter-spacing="-1">Xの公開情報を、</text>
     <text x="58" y="334" fill="#6ae6d3" font-size="38" font-weight="650" letter-spacing="-1">AIエージェントから。</text>
-    <text x="58" y="386" fill="#b8c8d8" font-size="20">投稿・プロフィール・トレンドを取得。</text>
+    <text x="58" y="386" fill="#b8c8d8" font-size="20">投稿・プロフィール・タイムライン・トレンドを取得。</text>
     <text x="58" y="417" fill="#b8c8d8" font-size="20">Xへのログインも、APIキーも不要。</text>
 
     <g font-size="13" font-weight="700" fill="#d2e3ee" text-anchor="middle">
       <rect x="58" y="452" width="111" height="32" rx="16" fill="#1e3446"/>
       <text x="113" y="473">読み取り専用</text>
       <rect x="179" y="452" width="104" height="32" rx="16" fill="#1e3446"/>
-      <text x="231" y="473">8つのツール</text>
+      <text x="231" y="473">12のツール</text>
       <rect x="293" y="452" width="171" height="32" rx="16" fill="#1e3446"/>
       <text x="378" y="473">STREAMABLE HTTP</text>
     </g>
@@ -42,13 +42,12 @@
     <circle cx="727" cy="83" r="5" fill="#38516a"/>
     <circle cx="746" cy="83" r="5" fill="#38516a"/>
     <text x="770" y="89" fill="#b8c8d8" font-size="14">AIエージェント → ツール呼び出し</text>
-    <text x="718" y="162" fill="#6ae6d3" font-family="'SFMono-Regular', Consolas, monospace" font-size="28" font-weight="600">search_posts</text>
+    <text x="718" y="162" fill="#6ae6d3" font-family="'SFMono-Regular', Consolas, monospace" font-size="28" font-weight="600">get_profile_statuses</text>
     <g font-family="'SFMono-Regular', Consolas, monospace" font-size="23">
-      <text x="718" y="213" fill="#b8c8d8">{</text>
-      <text x="742" y="253" fill="#b8c8d8">"q": <tspan fill="#f7fafc">"from:jack"</tspan>,</text>
-      <text x="742" y="293" fill="#b8c8d8">"feed": <tspan fill="#f7fafc">"latest"</tspan>,</text>
-      <text x="742" y="333" fill="#b8c8d8">"count": <tspan fill="#f2c68f">2</tspan></text>
-      <text x="718" y="373" fill="#b8c8d8">}</text>
+      <text x="718" y="233" fill="#b8c8d8">{</text>
+      <text x="742" y="273" fill="#b8c8d8">"handle": <tspan fill="#f7fafc">"jack"</tspan>,</text>
+      <text x="742" y="313" fill="#b8c8d8">"count": <tspan fill="#f2c68f">2</tspan></text>
+      <text x="718" y="353" fill="#b8c8d8">}</text>
     </g>
 
     <rect x="682" y="450" width="138" height="42" rx="10" fill="#6ae6d3"/>
