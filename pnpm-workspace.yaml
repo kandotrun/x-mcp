@@ -1,0 +1,8 @@
+# Allow only the dependency build scripts that wrangler needs (pnpm blocks all others).
+allowBuilds:
+  esbuild: true
+  workerd: true
+
+# Keep pnpm-lock.yaml a single YAML document so GitHub's dependency graph
+# (and therefore Dependabot alerts and security updates) can read it.
+pmOnFail: ignore
