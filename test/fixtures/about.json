@@ -1,0 +1,14 @@
+{
+  "code": 200,
+  "message": "OK",
+  "about_account": {
+    "based_in": "Japan",
+    "location_accurate": true,
+    "created_country_accurate": true,
+    "source": "Japan App Store",
+    "username_changes": {
+      "count": 1,
+      "last_changed_at": "2020-01-01T00:00:00.000Z"
+    }
+  }
+}

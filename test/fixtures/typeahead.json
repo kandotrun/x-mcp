@@ -1,0 +1,52 @@
+{
+  "code": 200,
+  "query": "exam",
+  "num_results": 3,
+  "users": [
+    {
+      "screen_name": "example_dev",
+      "url": "https://x.com/example_dev",
+      "id": "1000000001",
+      "followers": 98765,
+      "following": 321,
+      "likes": 4567,
+      "media_count": 89,
+      "statuses": 2345,
+      "name": "Example Dev",
+      "description": "Builds small tools.",
+      "raw_description": {
+        "text": "Builds small tools.",
+        "facets": []
+      },
+      "location": "Internet",
+      "banner_url": "https://pbs.twimg.com/profile_banners/1000000001/1700000000",
+      "avatar_url": "https://pbs.twimg.com/profile_images/1000000001/avatar_normal.jpg",
+      "joined": "Mon Jan 02 03:04:05 +0000 2012",
+      "protected": false,
+      "website": {
+        "url": "https://example.com",
+        "display_url": "example.com"
+      },
+      "verification": {
+        "verified": true,
+        "verified_at": null,
+        "type": "individual"
+      },
+      "type": "profile"
+    }
+  ],
+  "topics": [
+    {
+      "topic": "example topic",
+      "result_context": {}
+    }
+  ],
+  "events": [
+    {
+      "topic": "Example Event",
+      "url": "https://x.com/i/events/1",
+      "supporting_text": "Live",
+      "primary_image": {}
+    }
+  ]
+}

@@ -1,0 +1,295 @@
+{
+  "code": 200,
+  "results": [
+    {
+      "type": "status",
+      "url": "https://x.com/example_dev/status/2000000000000000203",
+      "id": "2000000000000000203",
+      "text": "Plain post number three.",
+      "raw_text": {
+        "text": "Plain post number three.",
+        "display_text_range": [
+          0,
+          24
+        ],
+        "facets": []
+      },
+      "author": {
+        "screen_name": "example_dev",
+        "url": "https://x.com/example_dev",
+        "id": "1000000001",
+        "followers": 98765,
+        "following": 321,
+        "likes": 4567,
+        "media_count": 89,
+        "statuses": 2345,
+        "name": "Example Dev",
+        "description": "Builds small tools.",
+        "raw_description": {
+          "text": "Builds small tools.",
+          "facets": []
+        },
+        "location": "Internet",
+        "banner_url": "https://pbs.twimg.com/profile_banners/1000000001/1700000000",
+        "avatar_url": "https://pbs.twimg.com/profile_images/1000000001/avatar_normal.jpg",
+        "joined": "Mon Jan 02 03:04:05 +0000 2012",
+        "protected": false,
+        "website": {
+          "url": "https://example.com",
+          "display_url": "example.com"
+        },
+        "verification": {
+          "verified": true,
+          "verified_at": null,
+          "type": "individual"
+        },
+        "type": "profile"
+      },
+      "replies": 12,
+      "reposts": 34,
+      "likes": 567,
+      "bookmarks": 8,
+      "quotes": 3,
+      "embed_card": "tweet",
+      "created_at": "Thu Nov 26 20:00:24 +0000 2026",
+      "created_timestamp": 1795723224,
+      "views": 12345,
+      "is_note_tweet": false,
+      "community_note": null,
+      "lang": "en",
+      "replying_to": null,
+      "media": {},
+      "provider": "twitter",
+      "reposted_by": null
+    },
+    {
+      "type": "status",
+      "url": "https://x.com/sample_news/status/2000000000000000202",
+      "id": "2000000000000000202",
+      "text": "A post that example_dev reposted.",
+      "raw_text": {
+        "text": "A post that example_dev reposted.",
+        "display_text_range": [
+          0,
+          33
+        ],
+        "facets": []
+      },
+      "author": {
+        "screen_name": "sample_news",
+        "url": "https://x.com/sample_news",
+        "id": "1000000002",
+        "followers": 5000000,
+        "following": 321,
+        "likes": 4567,
+        "media_count": 89,
+        "statuses": 2345,
+        "name": "Sample News",
+        "description": "News about samples.",
+        "raw_description": {
+          "text": "News about samples.",
+          "facets": []
+        },
+        "location": "Internet",
+        "banner_url": "https://pbs.twimg.com/profile_banners/1000000002/1700000000",
+        "avatar_url": "https://pbs.twimg.com/profile_images/1000000002/avatar_normal.jpg",
+        "joined": "Mon Jan 02 03:04:05 +0000 2012",
+        "protected": false,
+        "website": {
+          "url": "https://example.com",
+          "display_url": "example.com"
+        },
+        "verification": {
+          "verified": false,
+          "verified_at": null,
+          "type": null
+        },
+        "type": "profile"
+      },
+      "replies": 12,
+      "reposts": 34,
+      "likes": 567,
+      "bookmarks": 8,
+      "quotes": 3,
+      "embed_card": "tweet",
+      "created_at": "Thu Nov 26 20:00:24 +0000 2026",
+      "created_timestamp": 1795723224,
+      "views": 12345,
+      "is_note_tweet": false,
+      "community_note": null,
+      "lang": "en",
+      "replying_to": null,
+      "media": {},
+      "provider": "twitter",
+      "reposted_by": {
+        "id": "1000000001",
+        "name": "Example Dev",
+        "screen_name": "example_dev",
+        "avatar_url": "https://pbs.twimg.com/profile_images/1000000001/avatar_normal.jpg",
+        "url": "https://x.com/example_dev"
+      }
+    },
+    {
+      "type": "status",
+      "url": "https://x.com/example_dev/status/2000000000000000201",
+      "id": "2000000000000000201",
+      "text": "@sample_news replying with a quote of a deleted post.",
+      "raw_text": {
+        "text": "@sample_news replying with a quote of a deleted post.",
+        "display_text_range": [
+          0,
+          53
+        ],
+        "facets": []
+      },
+      "author": {
+        "screen_name": "example_dev",
+        "url": "https://x.com/example_dev",
+        "id": "1000000001",
+        "followers": 98765,
+        "following": 321,
+        "likes": 4567,
+        "media_count": 89,
+        "statuses": 2345,
+        "name": "Example Dev",
+        "description": "Builds small tools.",
+        "raw_description": {
+          "text": "Builds small tools.",
+          "facets": []
+        },
+        "location": "Internet",
+        "banner_url": "https://pbs.twimg.com/profile_banners/1000000001/1700000000",
+        "avatar_url": "https://pbs.twimg.com/profile_images/1000000001/avatar_normal.jpg",
+        "joined": "Mon Jan 02 03:04:05 +0000 2012",
+        "protected": false,
+        "website": {
+          "url": "https://example.com",
+          "display_url": "example.com"
+        },
+        "verification": {
+          "verified": true,
+          "verified_at": null,
+          "type": "individual"
+        },
+        "type": "profile"
+      },
+      "replies": 12,
+      "reposts": 34,
+      "likes": 567,
+      "bookmarks": 8,
+      "quotes": 3,
+      "embed_card": "tweet",
+      "created_at": "Thu Nov 26 20:00:24 +0000 2026",
+      "created_timestamp": 1795723224,
+      "views": 12345,
+      "is_note_tweet": false,
+      "community_note": null,
+      "lang": "en",
+      "replying_to": {
+        "screen_name": "sample_news",
+        "status": "2000000000000000050",
+        "url": "https://x.com/sample_news/status/2000000000000000050",
+        "profile_url": "https://x.com/sample_news"
+      },
+      "media": {},
+      "provider": "twitter",
+      "reposted_by": null,
+      "quote": {
+        "type": "tombstone",
+        "provider": "twitter",
+        "reason": "deleted",
+        "message": "This post was deleted by the post author.",
+        "id": "2000000000000000040",
+        "url": "https://x.com/i/status/2000000000000000040"
+      }
+    },
+    {
+      "type": "status",
+      "url": "https://x.com/example_dev/status/2000000000000000200",
+      "id": "2000000000000000200",
+      "text": "Oldest post on this page.",
+      "raw_text": {
+        "text": "Oldest post on this page.",
+        "display_text_range": [
+          0,
+          25
+        ],
+        "facets": []
+      },
+      "author": {
+        "screen_name": "example_dev",
+        "url": "https://x.com/example_dev",
+        "id": "1000000001",
+        "followers": 98765,
+        "following": 321,
+        "likes": 4567,
+        "media_count": 89,
+        "statuses": 2345,
+        "name": "Example Dev",
+        "description": "Builds small tools.",
+        "raw_description": {
+          "text": "Builds small tools.",
+          "facets": []
+        },
+        "location": "Internet",
+        "banner_url": "https://pbs.twimg.com/profile_banners/1000000001/1700000000",
+        "avatar_url": "https://pbs.twimg.com/profile_images/1000000001/avatar_normal.jpg",
+        "joined": "Mon Jan 02 03:04:05 +0000 2012",
+        "protected": false,
+        "website": {
+          "url": "https://example.com",
+          "display_url": "example.com"
+        },
+        "verification": {
+          "verified": true,
+          "verified_at": null,
+          "type": "individual"
+        },
+        "type": "profile"
+      },
+      "replies": 12,
+      "reposts": 34,
+      "likes": 567,
+      "bookmarks": 8,
+      "quotes": 3,
+      "embed_card": "tweet",
+      "created_at": "Thu Nov 26 20:00:24 +0000 2026",
+      "created_timestamp": 1795723224,
+      "views": 12345,
+      "is_note_tweet": false,
+      "community_note": null,
+      "lang": "en",
+      "replying_to": null,
+      "media": {
+        "all": [
+          {
+            "type": "photo",
+            "id": "2000000000000000101",
+            "url": "https://pbs.twimg.com/media/EXAMPLEPHOTO.jpg?name=orig",
+            "width": 1024,
+            "height": 768,
+            "altText": "A whiteboard sketch",
+            "tagged_users": []
+          }
+        ],
+        "photos": [
+          {
+            "type": "photo",
+            "id": "2000000000000000101",
+            "url": "https://pbs.twimg.com/media/EXAMPLEPHOTO.jpg?name=orig",
+            "width": 1024,
+            "height": 768,
+            "altText": "A whiteboard sketch",
+            "tagged_users": []
+          }
+        ]
+      },
+      "provider": "twitter",
+      "reposted_by": null
+    }
+  ],
+  "cursor": {
+    "top": "TOPCURSOR-statuses",
+    "bottom": "BOTTOMCURSOR-statuses"
+  }
+}
