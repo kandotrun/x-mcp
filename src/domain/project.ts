@@ -135,7 +135,8 @@ export function articleText(content: unknown): string {
     const block = rec(entry);
     const text = typeof block?.text === 'string' ? block.text : '';
     if (block === undefined || block.type === 'atomic' || text.trim() === '') continue;
-    parts.push(`${typeof block.type === 'string' ? (ARTICLE_PREFIX[block.type] ?? '') : ''}${text}`);
+    const prefix = typeof block.type === 'string' && Object.hasOwn(ARTICLE_PREFIX, block.type) ? ARTICLE_PREFIX[block.type] : '';
+    parts.push(`${prefix}${text}`);
   }
   return parts.join('\n\n');
 }

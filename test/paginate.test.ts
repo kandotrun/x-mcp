@@ -224,6 +224,15 @@ describe('paginate', () => {
     expect(seen).toEqual(['105', '102', '101']);
   });
 
+  it('keeps an unread entry when a returned entry and the next one are deleted while a lower duplicate remains', async () => {
+    let ids = ['91', '90', '89', '91', '88'];
+    const fetchPage = async (up: string | null): Promise<Page> => ({ items: (up === null ? ids : []).map((id) => ({ id })), bottom: up === null ? 'p2' : 'p3' });
+    const seen = await drain(fetchPage, 1, () => {
+      if (ids.length === 5) ids = ['89', '91', '88'];
+    });
+    expect(seen).toEqual(['91', '89', '88']);
+  });
+
   it('keeps an unread entry above a lower duplicate of a returned one when the upper copy is deleted', async () => {
     let ids = ['91', '90', '91', '89'];
     const fetchPage = async (up: string | null): Promise<Page> => ({ items: (up === null ? ids : []).map((id) => ({ id })), bottom: up === null ? 'p2' : 'p3' });

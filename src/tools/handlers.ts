@@ -12,6 +12,7 @@ import {
   notes,
   pageMissing,
   postNotFound,
+  profileUnavailable,
   postRestricted,
   timelineMissing,
   unexpectedResponse
@@ -271,8 +272,10 @@ function diagnoseAccount(
       try {
         user = await lookUpAccount(session, handle, options.counter !== undefined);
       } catch (error) {
-        if (options.counter === undefined && error instanceof ToolError && error.code === 'not_found') return { note: options.emptyNote };
-        throw error;
+        if (!(error instanceof ToolError) || error.code !== 'not_found') throw error;
+        if (options.counter === undefined) return { note: options.emptyNote };
+        // The list shows that the account exists; only its count is missing.
+        throw profileUnavailable(handle);
       }
       return explain(count(user), false);
     }
@@ -284,8 +287,10 @@ function diagnoseAccount(
       if (!(error instanceof ToolError) || error.code !== 'not_found') throw error;
       const retried = await retry();
       if (retried.items.length > 0 || retried.hasMore) return retried;
-      if (options.counter === undefined && !retried.firstPageMissing) return { note: options.emptyNote };
-      throw error;
+      if (retried.firstPageMissing) throw error;
+      // An empty list shows that the account exists.
+      if (options.counter === undefined) return { note: options.emptyNote };
+      throw profileUnavailable(handle);
     }
     if (count(user) === 0) return explain(0, true);
     const retried = await retry();

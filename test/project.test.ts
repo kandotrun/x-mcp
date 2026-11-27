@@ -147,6 +147,10 @@ describe('articleText', () => {
 
   it('keeps the text of blocks whose type is not a string, without throwing', () => {
     expect(articleText({ blocks: [{ type: { toString: null }, text: 'body' }, { type: 7, text: 'more' }] })).toBe('body\n\nmore');
+    // Only the block types defined in the prefix table get a prefix, not inherited object keys.
+    expect(articleText({ blocks: [{ type: 'toString', text: 'one' }, { type: 'constructor', text: 'two' }, { type: 'header-one', text: 'Title' }] })).toBe(
+      'one\n\ntwo\n\n# Title'
+    );
   });
 });
 

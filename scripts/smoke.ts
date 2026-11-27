@@ -91,12 +91,15 @@ async function main(): Promise<void> {
       const firstIds = firstPosts.map((item) => item.id);
       const secondPosts = Array.isArray(second.data.posts) ? (second.data.posts as { id?: string }[]) : [];
       const secondIds = secondPosts.map((item) => item.id);
+      // Entries without an id (tombstones) cannot be compared, so only ids are checked for repeats.
+      const knownIds = secondIds.filter((id): id is string => typeof id === 'string');
       check(
         !second.isError &&
           secondIds.length > 0 &&
           secondIds.length <= 2 &&
           second.data.returned === secondIds.length &&
-          secondIds.every((id) => !firstIds.includes(id)),
+          new Set(knownIds).size === knownIds.length &&
+          knownIds.every((id) => !firstIds.includes(id)),
         'next_cursor continues without repeats',
         second.text.slice(0, 300)
       );
@@ -115,7 +118,8 @@ async function main(): Promise<void> {
       );
       if (!advertisedUnavailable) warn('search is down upstream but SEARCH_ENABLED is "true": set it to "false" and redeploy');
     } else {
-      pass('search_posts works upstream');
+      // An empty result is valid; a result without a posts array is not.
+      check(Array.isArray(search.data.posts), 'search_posts works upstream', search.text.slice(0, 300));
       if (advertisedUnavailable) warn('search works upstream again: set SEARCH_ENABLED to "true" and redeploy');
     }
   }

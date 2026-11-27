@@ -85,7 +85,8 @@ describe('get_post', () => {
   });
 
   it('returns the whole text of the longest post X allows', async () => {
-    const text = `${'a'.repeat(24_999)}😀`.slice(0, 25_000);
+    // 25,000 code points: 24,999 letters and one emoji (a surrogate pair).
+    const text = `${'a'.repeat(24_999)}😀`;
     const fake = fakeUpstream(() => json({ ...status, status: { ...status.status, text } }));
     const result = await call(await connect(fake.fetch), 'get_post', { id: '2000000000000000100' });
 
@@ -461,6 +462,21 @@ describe('get_profile_statuses', () => {
     expect((await call(await connect(flakyProfile({}).fetch), 'get_profile_articles', { handle: 'example_dev' })).data).toMatchObject({
       note: '@example_dev has no Articles.'
     });
+    // A counted list that showed the account exists does not report not_found when the profile keeps failing.
+    const followers = fakeUpstream((url) => (url.pathname.endsWith('/followers') ? emptyList() : json(userNotFound, 404)));
+    expect((await call(await connect(followers.fetch), 'get_profile_followers', { handle: 'example_dev' })).data).toMatchObject({
+      code: 'upstream_unavailable',
+      retryable: true
+    });
+    let listCalls = 0;
+    const missingThenEmpty = fakeUpstream((url) =>
+      url.pathname.endsWith('/following') ? (listCalls++ === 0 ? json(userNotFound, 404) : emptyList()) : json(userNotFound, 404)
+    );
+    expect((await call(await connect(missingThenEmpty.fetch), 'get_profile_following', { handle: 'example_dev' })).data).toMatchObject({
+      code: 'upstream_unavailable',
+      retryable: true
+    });
+    expect(missingThenEmpty.urls).toHaveLength(3);
     profileCalls = 0;
     const quiet = flakyProfile({ statuses: 0 });
     expect((await call(await connect(quiet.fetch), 'get_profile_statuses', { handle: 'quiet' })).data).toMatchObject({ note: '@quiet has no posts.' });

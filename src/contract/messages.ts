@@ -260,6 +260,14 @@ export const timelineMissing = (handle: string, what: string, listed: number | u
     hint: 'This is usually temporary; retry once in a few seconds.'
   });
 
+export const profileUnavailable = (handle: string) =>
+  new ToolError({
+    code: 'upstream_unavailable',
+    retryable: true,
+    message: `X returned an empty list for @${handle} but answered "not found" for its profile, so the empty result cannot be explained.`,
+    hint: 'This is usually temporary; retry once in a few seconds.'
+  });
+
 export const requestBudgetExhausted = (budget: number) =>
   new ToolError({
     code: 'rate_limited',

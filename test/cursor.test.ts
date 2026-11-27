@@ -77,7 +77,12 @@ describe('encodeCursor / decodeCursor', () => {
     expect(encodeCursor(STATUSES, { up: 'x'.repeat(512), seam: 'z'.repeat(13), returned: 'z'.repeat(13 * 200) }).length).toBeLessThanOrEqual(8192);
   });
 
-  it('passes any 0.1 cursor string (up to 500 characters) through verbatim and round-trips it', () => {
+  it('treats a value that starts like a versioned x-mcp cursor as one, not as a 0.1 raw cursor', () => {
+    for (const raw of ['xc9.page', 'xc2.abc.def']) expect(codeOf(() => decodeCursor(raw, STATUSES))).toMatch(/^invalid_cursor: cursor was issued by a different version/);
+    expect(decodeCursor('xc.page', STATUSES)).toEqual({ up: 'xc.page', seam: null, returned: '' });
+  });
+
+  it('passes any other 0.1 cursor string (up to 500 characters) through verbatim and round-trips it', () => {
     for (const raw of ['page two', ' padded ', 'quote"and\\backslash', '日本語のカーソル', '\u0001ctrl', 'x'.repeat(500)]) {
       expect(decodeCursor(raw, STATUSES)).toEqual({ up: raw, seam: null, returned: '' });
       const next = encodeCursor(STATUSES, { up: raw, seam: 'z'.repeat(13), returned: 'z'.repeat(13 * 200) });
