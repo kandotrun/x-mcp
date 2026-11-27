@@ -22,7 +22,8 @@ function validBaseUrl(raw: string, log: (line: Record<string, unknown>) => void)
   try {
     const url = new URL(raw.trim());
     if (url.protocol === 'https:' && url.search === '' && url.hash === '' && url.username === '' && url.password === '') {
-      return url.href.replace(/\/+$/, '');
+      // origin + pathname also drops empty "?" or "#" markers that href keeps.
+      return `${url.origin}${url.pathname}`.replace(/\/+$/, '');
     }
   } catch {
     // fall through to the default

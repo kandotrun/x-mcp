@@ -144,6 +144,10 @@ describe('articleText', () => {
       })
     ).toBe('# Title\n\nIntro\n\n- one\n\n1. two\n\n> quote');
   });
+
+  it('keeps the text of blocks whose type is not a string, without throwing', () => {
+    expect(articleText({ blocks: [{ type: { toString: null }, text: 'body' }, { type: 7, text: 'more' }] })).toBe('body\n\nmore');
+  });
 });
 
 describe('projectUser', () => {

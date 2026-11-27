@@ -32,7 +32,8 @@ async function callTool(client: Client, name: string, toolArgs: Record<string, u
   try {
     data = JSON.parse(text) as Record<string, unknown>;
   } catch {
-    // every tool result, including errors, should be JSON; a parse failure fails the checks below
+    // Every tool result, including errors, is JSON.
+    fail(`${name} returned text that is not JSON: ${text.slice(0, 120)}`);
   }
   return { isError: result.isError === true, data, text };
 }
@@ -40,11 +41,21 @@ async function callTool(client: Client, name: string, toolArgs: Record<string, u
 async function main(): Promise<void> {
   console.log(`x-mcp smoke test: ${target.href}${offline ? ' (offline)' : ''}`);
 
-  const health = (await (await fetch(new URL('/health', target))).json()) as Record<string, unknown>;
-  check(health.ok === true, `GET /health (version ${String(health.version ?? 'unknown')})`, JSON.stringify(health));
+  const healthResponse = await fetch(new URL('/health', target));
+  const health = (await healthResponse.json()) as Record<string, unknown>;
+  check(
+    healthResponse.status === 200 && health.ok === true,
+    `GET /health (version ${String(health.version ?? 'unknown')})`,
+    `HTTP ${healthResponse.status} ${JSON.stringify(health)}`
+  );
 
-  const discovery = (await (await fetch(new URL('/.well-known/mcp.json', target))).json()) as { tools?: unknown };
-  check(JSON.stringify(discovery.tools) === JSON.stringify(TOOL_NAMES), 'GET /.well-known/mcp.json lists every tool', JSON.stringify(discovery.tools));
+  const discoveryResponse = await fetch(new URL('/.well-known/mcp.json', target));
+  const discovery = (await discoveryResponse.json()) as { tools?: unknown };
+  check(
+    discoveryResponse.status === 200 && JSON.stringify(discovery.tools) === JSON.stringify(TOOL_NAMES),
+    'GET /.well-known/mcp.json lists every tool',
+    `HTTP ${discoveryResponse.status} ${JSON.stringify(discovery.tools)}`
+  );
 
   const client = new Client({ name: 'x-mcp-smoke', version: '1.0.0' });
   await client.connect(new StreamableHTTPClientTransport(target));
@@ -68,17 +79,27 @@ async function main(): Promise<void> {
 
     const first = await callTool(client, 'get_profile_statuses', { handle: 'jack', count: 2 });
     const hasCursor = typeof first.data.next_cursor === 'string' && first.data.next_cursor !== '';
+    const firstPosts = Array.isArray(first.data.posts) ? (first.data.posts as { id?: string }[]) : [];
     check(
-      !first.isError && Number(first.data.returned) <= 2 && first.data.has_more === true && hasCursor,
+      !first.isError && firstPosts.length <= 2 && first.data.returned === firstPosts.length && first.data.has_more === true && hasCursor,
       'get_profile_statuses enforces count=2 and returns next_cursor',
       first.text.slice(0, 300)
     );
     check(first.text.length < 10_000, `get_profile_statuses count=2 result is small (${first.text.length} chars)`);
     if (hasCursor) {
       const second = await callTool(client, 'get_profile_statuses', { handle: 'jack', count: 2, cursor: first.data.next_cursor });
-      const firstIds = (first.data.posts as { id?: string }[]).map((item) => item.id);
-      const secondIds = ((second.data.posts as { id?: string }[] | undefined) ?? []).map((item) => item.id);
-      check(!second.isError && secondIds.length > 0 && secondIds.every((id) => !firstIds.includes(id)), 'next_cursor continues without repeats', second.text.slice(0, 300));
+      const firstIds = firstPosts.map((item) => item.id);
+      const secondPosts = Array.isArray(second.data.posts) ? (second.data.posts as { id?: string }[]) : [];
+      const secondIds = secondPosts.map((item) => item.id);
+      check(
+        !second.isError &&
+          secondIds.length > 0 &&
+          secondIds.length <= 2 &&
+          second.data.returned === secondIds.length &&
+          secondIds.every((id) => !firstIds.includes(id)),
+        'next_cursor continues without repeats',
+        second.text.slice(0, 300)
+      );
     }
 
     const trends = await callTool(client, 'get_trends', { count: 3 });
@@ -87,7 +108,11 @@ async function main(): Promise<void> {
     const search = await callTool(client, 'search_posts', { q: 'from:jack', count: 1 });
     const advertisedUnavailable = (tools.find((tool) => tool.name === 'search_posts')?.title ?? '').includes('unavailable');
     if (search.isError) {
-      check(search.data.code === 'feature_unavailable', 'search_posts fails with feature_unavailable and a hint', search.text);
+      check(
+        search.data.code === 'feature_unavailable' && typeof search.data.hint === 'string' && search.data.hint !== '',
+        'search_posts fails with feature_unavailable and a hint',
+        search.text
+      );
       if (!advertisedUnavailable) warn('search is down upstream but SEARCH_ENABLED is "true": set it to "false" and redeploy');
     } else {
       pass('search_posts works upstream');

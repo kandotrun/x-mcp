@@ -84,7 +84,7 @@ export async function paginate<T>(options: PaginateOptions<T>): Promise<Paginate
 
     // Skip what was already returned from this page, and the previous page's last item (a seam overlap).
     const skip = keys(returned);
-    if (seam !== null) skip.add(idKey(seam));
+    if (seam !== null) skip.add(seam);
     const out: T[] = [];
     const added: string[] = [];
     let used = 2;
@@ -92,10 +92,9 @@ export async function paginate<T>(options: PaginateOptions<T>): Promise<Paginate
     let lastOnPage = seam;
     let i = 0;
     for (; i < items.length; i++) {
-      const id = itemId(items[i]);
       const key = itemKey(items[i]);
       if (skip.has(key)) {
-        if (id !== undefined) lastOnPage = id;
+        lastOnPage = key;
         continue;
       }
       if (out.length === count) break;
@@ -109,7 +108,7 @@ export async function paginate<T>(options: PaginateOptions<T>): Promise<Paginate
       used += size;
       skip.add(key);
       added.push(key);
-      if (id !== undefined) lastOnPage = id;
+      lastOnPage = key;
     }
 
     if (i < items.length) {

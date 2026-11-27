@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { ToolError } from '../src/contract/errors';
 import { decodeCursor, describeScopeKey, encodeCursor, fnv1a32, isUpstreamCursor, scopeKey } from '../src/domain/cursor';
+import { idKey } from '../src/domain/paginate';
 
 const STATUSES = scopeKey({ tool: 'get_profile_statuses', handle: 'NASA', includeReplies: false });
 
@@ -39,7 +40,7 @@ describe('scopeKey', () => {
 
 describe('encodeCursor / decodeCursor', () => {
   it('round-trips state', () => {
-    const state = { up: 'DAAHCgABHYHlojO__-oLAAIAAAA', seam: '2126043413984489760', returned: '0g4vy5ozutb2czabcdefghijkl' };
+    const state = { up: 'DAAHCgABHYHlojO__-oLAAIAAAA', seam: idKey('2126043413984489760'), returned: '0g4vy5ozutb2czabcdefghijkl' };
     const cursor = encodeCursor(STATUSES, state);
 
     expect(cursor).toMatch(/^xc1\.[A-Za-z0-9_-]+\.[0-9a-f]{8}$/);
@@ -55,20 +56,20 @@ describe('encodeCursor / decodeCursor', () => {
   it('accepts every upstream cursor it would issue, including ones with periods', () => {
     for (const up of ['next.page', 'a:b~c', 'x'.repeat(512)]) {
       expect(isUpstreamCursor(up)).toBe(true);
-      expect(decodeCursor(encodeCursor(STATUSES, { up, seam: '20', returned: '' }), STATUSES)).toEqual({ up, seam: '20', returned: '' });
+      expect(decodeCursor(encodeCursor(STATUSES, { up, seam: idKey('20'), returned: '' }), STATUSES)).toEqual({ up, seam: idKey('20'), returned: '' });
     }
     for (const up of ['', 'has space', 'x'.repeat(513), 'quote"', 'back\\slash', 'tab\t']) expect(isUpstreamCursor(up)).toBe(false);
-    expect(encodeCursor(STATUSES, { up: 'x'.repeat(512), seam: '12345678901234567890', returned: 'z'.repeat(13 * 200) }).length).toBeLessThanOrEqual(8192);
+    expect(encodeCursor(STATUSES, { up: 'x'.repeat(512), seam: 'z'.repeat(13), returned: 'z'.repeat(13 * 200) }).length).toBeLessThanOrEqual(8192);
   });
 
   it('passes any 0.1 cursor string (up to 500 characters) through verbatim and round-trips it', () => {
     for (const raw of ['page two', ' padded ', 'quote"and\\backslash', '日本語のカーソル', '\u0001ctrl', 'x'.repeat(500)]) {
       expect(decodeCursor(raw, STATUSES)).toEqual({ up: raw, seam: null, returned: '' });
-      const next = encodeCursor(STATUSES, { up: raw, seam: '12345678901234567890', returned: 'z'.repeat(13 * 200) });
+      const next = encodeCursor(STATUSES, { up: raw, seam: 'z'.repeat(13), returned: 'z'.repeat(13 * 200) });
       expect(next.length).toBeLessThanOrEqual(8192);
       expect(decodeCursor(next, STATUSES).up).toBe(raw);
     }
-    const worst = encodeCursor('st:' + 'a'.repeat(30), { up: '\u0001'.repeat(512), seam: '9'.repeat(20), returned: 'z'.repeat(13 * 200) });
+    const worst = encodeCursor('st:' + 'a'.repeat(30), { up: '\u0001'.repeat(512), seam: 'z'.repeat(13), returned: 'z'.repeat(13 * 200) });
     expect(worst.length).toBeLessThanOrEqual(8192);
     expect(decodeCursor(worst, 'st:' + 'a'.repeat(30)).up).toBe('\u0001'.repeat(512));
   });
@@ -105,6 +106,7 @@ describe('encodeCursor / decodeCursor', () => {
       ['st:nasa', '', null, ''],
       ['st:nasa', 'x'.repeat(513), null, ''],
       ['st:nasa', null, 'abc', ''],
+      ['st:nasa', null, '1234567890123', ''].map((v, i) => (i === 2 ? '20' : v)),
       ['st:nasa', null, null, 'xyz'],
       ['st:nasa', null, null, '0123abcd'],
       ['st:nasa', null, null, 'ABCDEFGHIJKLM'],

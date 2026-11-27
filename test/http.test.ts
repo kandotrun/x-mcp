@@ -123,6 +123,8 @@ describe('HTTP routes', () => {
     expect(response.status).toBe(200);
     expect(fake.urls.length).toBe(10);
     const results = (await response.json()) as { result: { isError?: boolean; content: { text: string }[] } }[];
+    const answered = (results as unknown as { id: number }[]).map((entry) => entry.id).sort((a, b) => a - b);
+    expect(answered).toEqual(Array.from({ length: 30 }, (_, i) => i));
     const rejected = results.filter((entry) => entry.result.isError === true);
     expect(rejected).toHaveLength(20);
     for (const entry of rejected) expect(entry.result.content[0]!.text).toContain('already made 10 upstream requests');

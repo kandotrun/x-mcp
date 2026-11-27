@@ -101,7 +101,7 @@ describe('paginate', () => {
     const result = await paginate({ state: START, count: 50, fetchPage: timeline.fetchPage, project });
 
     expect(result.items).toHaveLength(20);
-    expect(result).toMatchObject({ hasMore: true, pageEnded: true, next: { up: 'after-1011', seam: '1011', returned: '' } });
+    expect(result).toMatchObject({ hasMore: true, pageEnded: true, next: { up: 'after-1011', seam: idKey('1011'), returned: '' } });
   });
 
   it('ends on an empty page even though the upstream still returns a fresh bottom cursor', async () => {
@@ -172,12 +172,12 @@ describe('paginate', () => {
 
     expect(requested).toEqual([null, 'after-1007']);
     expect(second.items.map((item) => item.id)).toEqual(['1005', '1004', '1003', '1002']);
-    expect(second.next).toEqual({ up: 'after-1007', seam: '1007', returned: prints('1005', '1004', '1003', '1002') });
+    expect(second.next).toEqual({ up: 'after-1007', seam: idKey('1007'), returned: prints('1005', '1004', '1003', '1002') });
   });
 
   it('ends the list instead of looping when the upstream stops advancing', async () => {
     const stuck = async (): Promise<Page> => ({ items: [{ id: '1001' }], bottom: 'same' });
-    const result = await paginate({ state: { up: 'same', seam: '1001', returned: '' }, count: 5, fetchPage: stuck, project });
+    const result = await paginate({ state: { up: 'same', seam: idKey('1001'), returned: '' }, count: 5, fetchPage: stuck, project });
 
     expect(result).toMatchObject({ items: [], hasMore: false, endOfList: true });
   });
@@ -210,6 +210,21 @@ describe('paginate', () => {
     ['pages that hold only duplicates', [['1000', '1001'], ['1001', '1001'], ['1001'], ['1001', '1004']], 2, ['1000', '1001', '1004']]
   ])('drains %s', async (_name, pages, count, expected) => {
     expect(await drain(pagedFetch(pages), count)).toEqual(expected);
+  });
+
+  it('does not repeat an id-less entry that ends one page and starts the next', async () => {
+    const tombstone = { type: 'tombstone', reason: 'deleted' };
+    const fetchPage = async (up: string | null): Promise<Page> =>
+      up === null ? { items: [{ id: '3' }, tombstone], bottom: 'p2' } : up === 'p2' ? { items: [tombstone, { id: '2' }], bottom: 'p3' } : { items: [], bottom: 'p4' };
+    const seen: unknown[] = [];
+    let state = START;
+    for (let call = 0; call < 10; call++) {
+      const result = await paginate({ state, count: 2, fetchPage, project: (item: unknown) => item });
+      seen.push(...result.items);
+      if (!result.hasMore) break;
+      state = result.next!;
+    }
+    expect(seen).toEqual([{ id: '3' }, tombstone, { id: '2' }]);
   });
 
   it('records entries without a numeric id, so they are returned once and the page moves on', async () => {

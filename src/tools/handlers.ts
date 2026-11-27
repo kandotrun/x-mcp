@@ -34,6 +34,7 @@ const arr = (value: unknown): unknown[] => (Array.isArray(value) ? value : []);
 const num = (value: unknown): number | undefined => (typeof value === 'number' && Number.isFinite(value) ? value : undefined);
 
 const RESTRICTED_REASONS = new Set(['suspended', 'protected', 'private', 'blocked', 'withheld']);
+const isRestricted = (reason: unknown) => typeof reason === 'string' && RESTRICTED_REASONS.has(reason);
 /** Caps used when one post's text and Article body together would exceed the result budget. */
 const OVERSIZED_SINGLE_LIMITS = { textMax: 6_000, articleMax: 6_000 };
 
@@ -48,7 +49,7 @@ export async function getPost(args: ToolArgs<'get_post'>, { session }: ToolConte
   const status = outcome.kind === 'ok' ? rec(outcome.body.status) : undefined;
   if (status === undefined) throw unexpectedResponse();
   if (status.type !== undefined && status.type !== 'status') {
-    throw RESTRICTED_REASONS.has(String(status.reason)) ? postRestricted(postId) : postNotFound(postId);
+    throw isRestricted(status.reason) ? postRestricted(postId) : postNotFound(postId);
   }
   if (args.response_format === 'detailed') {
     const detailed = { post: stripMosaic(status) };
@@ -116,14 +117,15 @@ const ENVELOPE_OVERHEAD = 600;
 
 /**
  * Characters left for list items once the envelope is accounted for: the longest next_cursor this call can issue
- * (continuing on the same upstream page, or moving to a new page with the longest issued bottom cursor) plus notes.
+ * (continuing on the same upstream page, or after hopping to a new page with the longest issued bottom cursor) plus notes.
  */
 export function itemBudgetFor(scope: string, state: CursorState, count: number): number {
-  const id = '9'.repeat(20);
-  const keys = Math.min(CURSOR_MAX_RETURNED, state.returned.length / KEY_LENGTH + count);
-  const samePage = encodeCursor(scope, { up: state.up, seam: id, returned: 'z'.repeat(KEY_LENGTH * keys) }).length;
-  const nextPage = encodeCursor(scope, { up: 'x'.repeat(MAX_UPSTREAM_CURSOR), seam: id, returned: '' }).length;
-  return MAX_RESULT_CHARS - ENVELOPE_OVERHEAD - Math.max(samePage, nextPage);
+  const seam = 'z'.repeat(KEY_LENGTH);
+  const keys = 'z'.repeat(KEY_LENGTH * Math.min(CURSOR_MAX_RETURNED, state.returned.length / KEY_LENGTH + count));
+  const samePage = encodeCursor(scope, { up: state.up, seam, returned: keys }).length;
+  // After a hop the cursor can carry the longest issued bottom cursor and this call's keys.
+  const hopped = encodeCursor(scope, { up: 'x'.repeat(MAX_UPSTREAM_CURSOR), seam, returned: keys }).length;
+  return MAX_RESULT_CHARS - ENVELOPE_OVERHEAD - Math.max(samePage, hopped);
 }
 
 async function listPage(request: ListRequest): Promise<Rec> {
@@ -377,7 +379,7 @@ export async function getPostReposts(args: ToolArgs<'get_post_reposts'>, { sessi
       const outcome = await session.fetch(routes.status(postId), { postId });
       const status = outcome.kind === 'ok' ? rec(outcome.body.status) : undefined;
       if (status !== undefined && status.type !== undefined && status.type !== 'status') {
-        throw RESTRICTED_REASONS.has(String(status.reason)) ? postRestricted(postId) : postNotFound(postId);
+        throw isRestricted(status.reason) ? postRestricted(postId) : postNotFound(postId);
       }
     }
   });

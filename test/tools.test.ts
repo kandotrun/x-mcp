@@ -11,6 +11,7 @@ import {
 import { MAX_RESULT_CHARS } from '../src/contract/limits';
 import { TOOL_NAMES } from '../src/contract/tools';
 import { scopeKey } from '../src/domain/cursor';
+import { idKey } from '../src/domain/paginate';
 import { stripMosaic } from '../src/domain/project';
 import { itemBudgetFor } from '../src/tools/handlers';
 import { call, connect, fakeUpstream, json, timelinePage } from './helpers';
@@ -247,6 +248,38 @@ describe('get_profile_statuses', () => {
       expect(result.text.length).toBeLessThanOrEqual(30_000);
       expect(result.data.next_cursor).toEqual(expect.any(String));
     }
+  });
+
+  it('stays under 30,000 characters when a call hops to a new page with a long bottom cursor', async () => {
+    const a = '4000000000000000001';
+    let newest = [{ id: a }, { id: '4000000000000000002' }];
+    const scope = scopeKey({ tool: 'get_profile_statuses', handle: 'jack', includeReplies: false });
+    // Items sized so that exactly 100 of them fill the item budget of the second call.
+    const budget = itemBudgetFor(scope, { up: null, seam: null, returned: idKey(a) }, 100);
+    const size = Math.floor((budget - 2) / 100) - 1;
+    const hopped = Array.from({ length: 101 }, (_, i) => {
+      const id = String(3900000000000000000n + BigInt(i));
+      return { id, text: 'v'.repeat(size - JSON.stringify({ id, text: '' }).length) };
+    });
+    const fake = fakeUpstream((url) =>
+      url.searchParams.get('cursor') === null
+        ? json({ code: 200, results: newest, cursor: { bottom: 'b'.repeat(512) } })
+        : json({ code: 200, results: hopped, cursor: { bottom: 'c'.repeat(512) } })
+    );
+    const client = await connect(fake.fetch);
+    const first = await call(client, 'get_profile_statuses', { handle: 'jack', count: 1, response_format: 'detailed' });
+    // Everything left on the newest page was returned, so the next call hops to the 512-character bottom cursor.
+    newest = [{ id: a }];
+
+    const second = await call(client, 'get_profile_statuses', {
+      handle: 'jack',
+      count: 100,
+      response_format: 'detailed',
+      cursor: first.data.next_cursor
+    });
+    expect(second.isError).toBe(false);
+    expect(second.data.returned).toBe(100);
+    expect(second.text.length).toBeLessThanOrEqual(30_000);
   });
 
   it('rejects a cursor issued for another account', async () => {
@@ -517,7 +550,9 @@ describe('0.1 call shapes', () => {
       const result = await call(client, name, args);
       expect(result.text.length).toBeLessThanOrEqual(MAX_RESULT_CHARS);
       expect(result.text).not.toMatch(BRAND_RE);
-      if (result.isError) expect(ErrorPayloadSchema.parse(result.data).code).toBe('feature_unavailable');
+      // Only the search tools are down upstream in this fake; every other 0.1 call must succeed.
+      if (name === 'search_posts' || name === 'typeahead') expect(ErrorPayloadSchema.parse(result.data).code, name).toBe('feature_unavailable');
+      else expect(result.isError, `${name} ${result.text.slice(0, 200)}`).toBe(false);
     }
   });
 });

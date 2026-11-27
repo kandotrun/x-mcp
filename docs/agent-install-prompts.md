@@ -16,7 +16,7 @@ https://raw.githubusercontent.com/kandotrun/x-mcp/main/skills/x-mcp/SKILL.md
 
 https://x.mcp.2-38.com/mcp
 
-クライアント別の設定方法は https://github.com/kandotrun/x-mcp/blob/main/README.ja.md#1-クライアントに接続する にあります。たとえば Claude Code なら次のとおりです。
+クライアント別の設定方法は https://github.com/kandotrun/x-mcp/blob/main/README.ja.md#1-スキルを読み込んで接続する にあります。たとえば Claude Code なら次のとおりです。
 claude mcp add --transport http --scope user x https://x.mcp.2-38.com/mcp
 
 このMCPは、`twitter.2-38.com` 経由で公開X/Twitter情報を read-only で取得するためのものです。投稿・いいね・RT・DM・フォロー・通知・非公開アカウントなど、認証や書き込みが必要な操作には使わないでください。
@@ -64,7 +64,7 @@ Then configure an MCP server named `x` with this URL (Streamable HTTP, no authen
 
 https://x.mcp.2-38.com/mcp
 
-Per-client setup is at https://github.com/kandotrun/x-mcp#1-connect-your-client. For example, in Claude Code:
+Per-client setup is at https://github.com/kandotrun/x-mcp#1-load-the-skill-and-connect. For example, in Claude Code:
 claude mcp add --transport http --scope user x https://x.mcp.2-38.com/mcp
 
 This MCP provides read-only public X/Twitter retrieval via `twitter.2-38.com`. Do not use it for posting, liking, reposting, DMs, following, notifications, private accounts, or any authenticated write action.
